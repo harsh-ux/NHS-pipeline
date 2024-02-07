@@ -1,7 +1,7 @@
 import socket
 import hl7
 import datetime
-
+import csv
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 
 
@@ -57,3 +57,30 @@ def predict_with_dt(dt_model, data):
     labels = [REVERSE_LABELS_MAP[item] for item in y_pred]
 
     return labels
+
+
+def populate_test_results_table(db, path):
+    """
+    Reads in the training/testing data from a csv file and returns 
+    a list of that data.
+    Args:
+        - db {InMemoryDatabase}: the database object
+        - path {str}: path to the data
+    """
+    with open(path, newline='') as f:
+        rows = csv.reader(f)
+        for i, row in enumerate(rows):
+            # skip header
+            if i == 0:
+                continue
+            
+            # remove empty strings
+            while row and row[-1] == '':
+                row.pop()
+            
+            mrn = row[0]
+            # for each date, result pair insert into the table
+            for j in range(1, len(row), 2):
+                date = row[j]
+                result = float(row[j+1])
+                db.insert_test_result(mrn, date, result)

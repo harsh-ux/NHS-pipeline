@@ -3,7 +3,9 @@ from utils import (
     process_mllp_message,
     parse_hl7_message,
     create_acknowledgement,
+    populate_test_results_table,
 )
+from memory_db import InMemoryDatabase
 import hl7
 
 
@@ -40,6 +42,17 @@ class TestUtilsClient(unittest.TestCase):
         self.assertIn(b"MSH", ack_message)
         self.assertIn(b"ACK", ack_message)
         self.assertIn(b"MSA|AA|", ack_message)
+
+    
+    def test_populate_test_results_table(self):
+        db = InMemoryDatabase()
+        populate_test_results_table(db, 'history.csv')
+        # expected result
+        expected_result = ('822825', '2024-01-01 06:12:00', 68.58)
+        result = db.get_test_results(expected_result[0])[0]
+        # close the db
+        db.close()
+        self.assertEqual(result, expected_result)
 
 
 if __name__ == "__main__":
