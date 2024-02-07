@@ -2,7 +2,7 @@ import socket
 import hl7
 import datetime
 
-from constants import MLLP_START_CHAR, MLLP_END_CHAR
+from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 
 
 def process_mllp_message(data):
@@ -24,7 +24,7 @@ def parse_hl7_message(hl7_data):
     return message
 
 
-def create_acknowledgement(hl7_msg):
+def create_acknowledgement():
     """
     Creates an HL7 ACK message for the received message.
     """
@@ -33,3 +33,27 @@ def create_acknowledgement(hl7_msg):
     framed_ack = MLLP_START_CHAR + ack_msg.encode() + MLLP_END_CHAR
     return framed_ack
 
+
+def predict_with_dt(dt_model, data):
+    """
+    Following data needs to be passed:
+    [
+        "age",
+        "sex",
+        "C1",
+        "RV1",
+        "RV1_ratio",
+        "RV2",
+        "RV2_ratio",
+        "change_within_48hrs",
+        "D"
+    ]
+    Predict with the DT Model on the data.
+    Returns the predicted labels.
+    """
+    y_pred = dt_model.predict(data)
+
+    # Map the predictions to labels
+    labels = [REVERSE_LABELS_MAP[item] for item in y_pred]
+
+    return labels
