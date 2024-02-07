@@ -20,7 +20,8 @@ def parse_hl7_message(hl7_data):
     """
     Parses the HL7 message and returns the parsed message object.
     """
-    message = hl7.parse(hl7_data.decode("utf-8"))
+    hl7_string = hl7_data.decode("utf-8").replace('\r', '\n')
+    message = hl7.parse(hl7_string)
     return message
 
 
@@ -88,7 +89,10 @@ def populate_test_results_table(db, path):
 
 def parse_system_message(message):
     """
-    Parses the HL7 message and returns the parsed message object.
+    Parses the HL7 message and returns components of respective message type: PAS, LIMS
+    Args:
+        - HL7 message object
+    Returns the category of message, MRN, [AGE, SEX] if PAS category or [DATE_BLOOD_TEST, CREATININE_VALUE] if LIMS
     """
     mrn = 0
     category = ''
