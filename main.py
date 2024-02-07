@@ -34,7 +34,7 @@ def start_server(host="0.0.0.0", port=8440):
                 
                 print(category,mrn,data,'\n')
                 # Create and send ACK message
-                ack_message = create_acknowledgement()
+                ack_message = create_acknowledgement(message)
                 sock.sendall(ack_message)
             else:
                 print("No valid MLLP message received.")

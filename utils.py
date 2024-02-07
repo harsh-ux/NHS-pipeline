@@ -25,7 +25,7 @@ def parse_hl7_message(hl7_data):
     return message
 
 
-def create_acknowledgement():
+def create_acknowledgement(hl7_msg):
     """
     Creates an HL7 ACK message for the received message.
     """
