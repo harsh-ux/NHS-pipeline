@@ -32,3 +32,4 @@ def create_acknowledgement(hl7_msg):
     ack_msg = f"MSH|^~\\&|||||{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}||ACK||P|2.5\rMSA|AA|\r"
     framed_ack = MLLP_START_CHAR + ack_msg.encode() + MLLP_END_CHAR
     return framed_ack
+

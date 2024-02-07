@@ -22,6 +22,7 @@ def start_server(host="0.0.0.0", port=8440):
                 message = parse_hl7_message(hl7_data)
                 print("Parsed HL7 Message:")
                 print(message)
+                print(type(message))
 
                 # Create and send ACK message
                 ack_message = create_acknowledgement(message)
