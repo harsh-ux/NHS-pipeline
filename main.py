@@ -1,6 +1,6 @@
 import socket
 from joblib import load
-from utils import process_mllp_message, parse_hl7_message, create_acknowledgement
+from utils import process_mllp_message, parse_hl7_message, create_acknowledgement, parse_system_message
 
 from constants import DT_MODEL_PATH, REVERSE_LABELS_MAP
 
@@ -28,9 +28,11 @@ def start_server(host="0.0.0.0", port=8440):
             if hl7_data:
                 message = parse_hl7_message(hl7_data)
                 print("Parsed HL7 Message:")
-                print(message)
-                print(type(message))
-
+                # print(message)
+                # print(type(message))
+                category,mrn,data = parse_system_message(message) #category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
+                
+                print(category,mrn,data,'\n')
                 # Create and send ACK message
                 ack_message = create_acknowledgement(message)
                 sock.sendall(ack_message)
