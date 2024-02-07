@@ -2,6 +2,7 @@ FROM ubuntu:jammy
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -yq install python3
 COPY simulator.py /simulator/
 COPY simulator_test.py /simulator/
+COPY dt_model.joblib /model/
 WORKDIR /simulator
 RUN ./simulator_test.py
 COPY messages.mllp /data/
