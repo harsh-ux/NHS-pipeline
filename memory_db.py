@@ -1,11 +1,13 @@
 import sqlite3
 from constants import ON_DISK_DB_PATH
 import os
+from utils import populate_test_results_table, populate_patients_table
 
 class InMemoryDatabase():
     def __init__(self):
         self.connection = sqlite3.connect(':memory:')
         self.initialise_tables()
+        self.load_db()
     
 
     def initialise_tables(self):
@@ -72,12 +74,14 @@ class InMemoryDatabase():
                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         # execute the query
-        self.connection.execute(
-            query,
-            (mrn, age, sex, c1, rv1, rv1_r, rv2, rv2_r, change, D, aki)
-        )
-        self.connection.commit()
-
+        try:
+            self.connection.execute(
+                query,
+                (mrn, age, sex, c1, rv1, rv1_r, rv2, rv2_r, change, D, aki)
+            )
+            self.connection.commit()
+        except sqlite3.IntegrityError:
+            print(f'The features for patient {mrn} are already in the features table!')
     
     def insert_patient(self, mrn, age, sex):
         """
@@ -94,11 +98,14 @@ class InMemoryDatabase():
                 (?, ?, ?)
         """
         # execute the query
-        self.connection.execute(
-            query,
-            (mrn, age, sex)
-        )
-        self.connection.commit()
+        try:
+            self.connection.execute(
+                query,
+                (mrn, age, sex)
+            )
+            self.connection.commit()
+        except sqlite3.IntegrityError:
+            print(f'Patient {mrn} is already in the patients table!')
 
 
     def insert_test_result(self, mrn, date, result):
@@ -116,11 +123,14 @@ class InMemoryDatabase():
                 (?, ?, ?)
         """
         # execute the query
-        self.connection.execute(
-            query,
-            (mrn, date, result)
-        )
-        self.connection.commit()
+        try:
+            self.connection.execute(
+                query,
+                (mrn, date, result)
+            )
+            self.connection.commit()
+        except sqlite3.IntegrityError:
+            print(f'Test result on date-time: {date} for: {mrn} is already in the test_results table!')
 
 
     def get_patient_features(self, mrn):
@@ -229,10 +239,8 @@ class InMemoryDatabase():
         if not os.path.exists(ON_DISK_DB_PATH):
             with open(ON_DISK_DB_PATH, 'w'):
                 pass
-        # connect to the disk db
-        disk_connection = sqlite3.connect(ON_DISK_DB_PATH, check_same_thread=False)
         # backs up and closes the connection
-        with disk_connection:
+        with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
             self.connection.backup(disk_connection)
 
 
@@ -240,9 +248,16 @@ class InMemoryDatabase():
         """
         Load the on-disk database into the in-memory database.
         """
-        pass
-    
+        # if on-disk db doesn't exist, use the csv file
+        if not os.path.exists(ON_DISK_DB_PATH):
+            populate_test_results_table(self, 'history.csv')
+            populate_patients_table(self, 'processed_history.csv')
+        else:
+            # load the on-disk db into the in-memory one
+            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                disk_connection.backup(self.connection)
 
+    
     def close(self):
         """
         Close the database connection.
