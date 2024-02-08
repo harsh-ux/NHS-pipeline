@@ -20,11 +20,12 @@ def parse_hl7_message(hl7_data):
     """
     Parses the HL7 message and returns the parsed message object.
     """
-    message = hl7.parse(hl7_data.decode("utf-8"))
+    hl7_string = hl7_data.decode("utf-8").replace('\r', '\n')
+    message = hl7.parse(hl7_string)
     return message
 
 
-def create_acknowledgement():
+def create_acknowledgement(hl7_msg):
     """
     Creates an HL7 ACK message for the received message.
     """
@@ -84,3 +85,49 @@ def populate_test_results_table(db, path):
                 date = row[j]
                 result = float(row[j+1])
                 db.insert_test_result(mrn, date, result)
+
+
+def parse_system_message(message):
+    """
+    Parses the HL7 message and returns components of respective message type: PAS, LIMS
+    Args:
+        - HL7 message object
+    Returns the category of message, MRN, [AGE, SEX] if PAS category or [DATE_BLOOD_TEST, CREATININE_VALUE] if LIMS
+    """
+    mrn = 0
+    category = ''
+    data = ['']*2
+    segments = str(message).split('\n')
+    if len(segments) < 4:
+        parsed_seg = segments[1].split('|')
+        if len(parsed_seg) > 4:
+            mrn = parsed_seg[3]
+            category = 'PAS-admit'
+            date_of_birth = parsed_seg[7]
+            data[0] = calculate_age(date_of_birth)
+            data[1] = parsed_seg[8][0]
+        else:
+            mrn = parsed_seg[3].replace('\r','')
+            category = 'PAS-discharge'
+    else:
+        mrn = segments[1].split('|')[3]
+        category = 'LIMS'
+        data[0] = segments[2].split('|')[7] #date of blood test
+        data[1] = float(segments[3].split('|')[5])
+
+    return category,mrn,data
+            
+def calculate_age(date_of_birth):
+    """
+    Calculate age based on the date of birth provided in the format YYYYMMDD.
+    """
+    # Parse the date of birth string into a datetime object
+    dob = datetime.datetime.strptime(date_of_birth, "%Y%m%d")
+    
+    # Get the current date
+    current_date = datetime.datetime.now()
+    
+    # Calculate the difference between the current date and the date of birth
+    age = current_date.year - dob.year - ((current_date.month, current_date.day) < (dob.month, dob.day))
+    
+    return age
