@@ -23,7 +23,7 @@ def start_server(host="0.0.0.0", port=8440):
             if not data:
                 print("No data received. Closing connection.")
                 break
-
+            
             hl7_data = process_mllp_message(data)
             if hl7_data:
                 message = parse_hl7_message(hl7_data)
@@ -31,7 +31,7 @@ def start_server(host="0.0.0.0", port=8440):
                 # print(message)
                 # print(type(message))
                 category,mrn,data = parse_system_message(message) #category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
-                
+
                 print(category,mrn,data,'\n')
                 # Create and send ACK message
                 ack_message = create_acknowledgement(message)
