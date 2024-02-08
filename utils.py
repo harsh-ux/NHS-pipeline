@@ -62,8 +62,7 @@ def predict_with_dt(dt_model, data):
 
 def populate_test_results_table(db, path):
     """
-    Reads in the training/testing data from a csv file and returns 
-    a list of that data.
+    Reads in the patient test result history and populates the table.
     Args:
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
@@ -85,6 +84,29 @@ def populate_test_results_table(db, path):
                 date = row[j]
                 result = float(row[j+1])
                 db.insert_test_result(mrn, date, result)
+
+
+def populate_patients_table(db, path):
+    """
+    Reads in the processed history file and populates the patients table.
+    Args:
+        - db {InMemoryDatabase}: the database object
+        - path {str}: path to the data
+    """
+    with open(path, newline='') as f:
+        rows = csv.reader(f)
+        for i, row in enumerate(rows):
+            # skip header
+            if i == 0:
+                continue
+            
+            # get patient info
+            mrn = row[1]
+            age = row[2]
+            sex = row[3]
+            
+            # insert into the table
+            db.insert_patient(mrn, age, sex)
 
 
 def parse_system_message(message):
