@@ -166,7 +166,11 @@ class InMemoryDatabase():
         """
         query = """
             SELECT 
-                * 
+                patients.mrn,
+                patients.age,
+                patients.sex,
+                test_results.date,
+                test_results.result
             FROM
                 patients
             JOIN
