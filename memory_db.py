@@ -88,7 +88,7 @@ class InMemoryDatabase():
             - sex {str}: Sex of the patient ('m'/'f')
         """
         query = """
-            INSERT INTO patients 
+            INSERT OR IGNORE INTO patients 
                 (mrn, age, sex) 
             VALUES 
                 (?, ?, ?)
