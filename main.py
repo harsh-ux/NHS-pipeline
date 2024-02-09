@@ -41,6 +41,7 @@ def start_server(mllp_address, pager_address, debug=False):
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
+    aki_lis = []
     # Start the server
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((mllp_host, int(mllp_port)))
@@ -97,8 +98,30 @@ def start_server(mllp_address, pager_address, debug=False):
                         aki = predict_with_dt(dt_model, input)
                     
                     elif len(patient_history) == 0:
-                        aki = ['n']
-                    
+                        latest_creatine_result = data[1]
+                        latest_creatine_date = data[0]
+                        D = 0
+                        change_ = False
+                        C1 = latest_creatine_result
+                        RV1 = C1
+                        RV1_ratio = 1
+                        RV2 = C1
+                        RV2_ratio = 1
+                        # print(db.get_patient(mrn))
+                        features = [
+                            db.get_patient(mrn)[1],
+                            label_encode(db.get_patient(mrn)[2]),
+                            C1,
+                            RV1,
+                            RV1_ratio,
+                            RV2,
+                            RV2_ratio,
+                            change_,
+                            D,
+                        ]
+                        input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                        aki = predict_with_dt(dt_model, input)
+                        aki_lis.append(aki)
                     if aki[0] == "y":
                         #count11 =  count11 + 1
                         if debug:
@@ -116,6 +139,7 @@ def start_server(mllp_address, pager_address, debug=False):
             else:
                 print("No valid MLLP message received.")
     #print("Number of patients with AKI detected: ", count11)
+    print("Labels for patients with no history: ", set(tuple(item) for item in aki_lis))
 
     if debug:
         print("Patients with Historical Data", count)
