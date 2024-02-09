@@ -3,7 +3,7 @@ MLLP_START_CHAR = b"\x0b"
 MLLP_END_CHAR = b"\x1c\x0d"
 
 # Path to load and store the trained Decision Tree model
-DT_MODEL_PATH = "app/dt_model.joblib"
+DT_MODEL_PATH = "dt_model.joblib"
 ON_DISK_DB_PATH = "database.db"
 
 # Map for AKI Label
