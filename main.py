@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import socket
+import signal
 import argparse
 from joblib import load
 from utils import (
@@ -9,11 +10,11 @@ from utils import (
     create_acknowledgement,
     parse_system_message,
     strip_url,
+    define_graceful_shutdown,
 )
 from memory_db import InMemoryDatabase
 from constants import DT_MODEL_PATH, FEATURES_COLUMNS
 from utils import (
-    populate_test_results_table,
     D_value_compute,
     RV_compute,
     predict_with_dt,
@@ -34,87 +35,107 @@ def start_server(mllp_address, pager_address, debug=False):
         outputs = []  # to measure f3 score
         count = 0
     mllp_host, mllp_port = strip_url(mllp_address)
+
     # Initialise the in-memory database
     db = InMemoryDatabase()  # this also loads the previous history
     assert db != None, "In-memory Database is not initialised properly..."
 
+    # register signals for graceful shutdown
+    signal.signal(signal.SIGINT, define_graceful_shutdown(db))
+    signal.signal(signal.SIGTERM, define_graceful_shutdown(db))
+
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
-    # Start the server
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((mllp_host, int(mllp_port)))
-        print(f"Connected to simulator on {mllp_address}")
-        #count11 = 0
-        while True:
-            data = sock.recv(1024)
-            if not data:
-                print("No data received. Closing connection.")
-                break
 
-            hl7_data = process_mllp_message(data)
-            if hl7_data:
-                message = parse_hl7_message(hl7_data)
+    try:
+        # Start the server
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((mllp_host, int(mllp_port)))
+            print(f"Connected to simulator on {mllp_address}")
+            #count11 = 0
+            while True:
+                data = sock.recv(1024)
+                if not data:
+                    print("No data received. Closing connection.")
+                    break
 
-                category, mrn, data = parse_system_message(
-                    message
-                )  # category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
-                if category == "PAS-admit":
-                    # print('Patient {} inserted'.format(mrn))
-                    db.insert_patient(mrn, int(data[0]), str(data[1]))
-                elif category == "PAS-discharge":
-                    db.discharge_patient(mrn)
-                elif category == "LIMS":
-                    start_time = datetime.now()
-                    patient_history = db.get_patient_history(str(mrn))
-                    if len(patient_history) != 0:
+                hl7_data = process_mllp_message(data)
+                if hl7_data:
+                    message = parse_hl7_message(hl7_data)
+
+                    category, mrn, data = parse_system_message(
+                        message
+                    )  # category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
+                    if category == "PAS-admit":
+                        # print('Patient {} inserted'.format(mrn))
+                        db.insert_patient(mrn, int(data[0]), str(data[1]))
+                    elif category == "PAS-discharge":
+                        db.discharge_patient(mrn)
+                    elif category == "LIMS":
+                        start_time = datetime.now()
+                        patient_history = db.get_patient_history(str(mrn))
+                        if len(patient_history) != 0:
+                            if debug:
+                                count = count + 1
+                            latest_creatine_result = data[1]
+                            latest_creatine_date = data[0]
+                            D, change_ = D_value_compute(
+                                latest_creatine_result,
+                                latest_creatine_date,
+                                patient_history,
+                            )
+                            C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
+                                latest_creatine_result,
+                                latest_creatine_date,
+                                patient_history,
+                            )
+                            features = [
+                                patient_history[0][1],
+                                label_encode(patient_history[0][2]),
+                                C1,
+                                RV1,
+                                RV1_ratio,
+                                RV2,
+                                RV2_ratio,
+                                change_,
+                                D,
+                            ]
+                            input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                            aki = predict_with_dt(dt_model, input)
+                        
+                        elif len(patient_history) == 0:
+                            aki = ['n']
+                        
+                        if aki[0] == "y":
+                            #count11 =  count11 + 1
+                            if debug:
+                                outputs.append((mrn, latest_creatine_date))
+                            send_pager_request(mrn, pager_address)
+                        end_time = datetime.now()
+                        db.insert_test_result(mrn, data[0], data[1])
                         if debug:
-                            count = count + 1
-                        latest_creatine_result = data[1]
-                        latest_creatine_date = data[0]
-                        D, change_ = D_value_compute(
-                            latest_creatine_result,
-                            latest_creatine_date,
-                            patient_history,
-                        )
-                        C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
-                            latest_creatine_result,
-                            latest_creatine_date,
-                            patient_history,
-                        )
-                        features = [
-                            patient_history[0][1],
-                            label_encode(patient_history[0][2]),
-                            C1,
-                            RV1,
-                            RV1_ratio,
-                            RV2,
-                            RV2_ratio,
-                            change_,
-                            D,
-                        ]
-                        input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                        aki = predict_with_dt(dt_model, input)
-                    
-                    elif len(patient_history) == 0:
-                        aki = ['n']
-                    
-                    if aki[0] == "y":
-                        #count11 =  count11 + 1
-                        if debug:
-                            outputs.append((mrn, latest_creatine_date))
-                        send_pager_request(mrn, pager_address)
-                    end_time = datetime.now()
-                    db.insert_test_result(mrn, data[0], data[1])
-                    if debug:
-                        latency = end_time - start_time
-                        latencies.append(latency)
+                            latency = end_time - start_time
+                            latencies.append(latency)
 
-                # Create and send ACK message
-                ack_message = create_acknowledgement()
-                sock.sendall(ack_message)
-            else:
-                print("No valid MLLP message received.")
+                    # Create and send ACK message
+                    ack_message = create_acknowledgement()
+                    sock.sendall(ack_message)
+                else:
+                    print("No valid MLLP message received.")
+    except Exception as e:
+        print(e)
+    finally:
+        # perform any cleanup or data persistance tasks
+        # (this is done when we encounter an exception or if the 
+        # program finishes its flow normally - so it is separate from the 
+        # graceful shutdown)
+        try:
+            db.persist_db()
+            db.close()
+            print("Database persisted")
+        except:
+            print('Database has already been persisted and closed.')
     #print("Number of patients with AKI detected: ", count11)
 
     if debug:

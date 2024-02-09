@@ -4,6 +4,7 @@ import numpy as np
 import datetime
 import joblib
 import csv
+import sys
 from statistics import median
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 import requests
@@ -314,3 +315,13 @@ def strip_url(url):
         host, port = host.split(":")
         port = int(port)
     return host, port
+
+
+def define_graceful_shutdown(db):
+    def graceful_shutdown(signum, frame):
+        print("Graceful shutdown procedure started")
+        db.persist_db()
+        db.close()
+        print("Database persisted")
+        sys.exit(0)
+    return graceful_shutdown
