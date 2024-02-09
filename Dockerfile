@@ -7,9 +7,6 @@ RUN pip3 install -r /app/requirements.txt
 # copy model 
 COPY dt_model.joblib /app/
 
-# copy history 
-COPY history.csv /app/
-
 # copy scripts
 COPY main.py /app/
 COPY constants.py /app/
