@@ -1,6 +1,11 @@
 import socket
 from joblib import load
-from utils import process_mllp_message, parse_hl7_message, create_acknowledgement, parse_system_message
+from utils import (
+    process_mllp_message,
+    parse_hl7_message,
+    create_acknowledgement,
+    parse_system_message,
+)
 from memory_db import InMemoryDatabase
 from constants import DT_MODEL_PATH, REVERSE_LABELS_MAP
 from utils import populate_test_results_table, D_value_compute, RV_compute, predict_with_dt, label_encode, send_pager_request
@@ -10,13 +15,13 @@ def start_server(host="0.0.0.0", port=8440):
     """
     Starts the TCP server to listen for incoming MLLP messages on the specified port.
     """
-    #Initialise the in-memory database
+    # Initialise the in-memory database
     db = InMemoryDatabase()
-    #print(db)
+    # print(db)
     assert db != None, "In-memory Database is not initialised properly..."
 
-    #Populate the in-memory database with processed historical data
-    #populate_test_results_table(db, 'history.csv')
+    # Populate the in-memory database with processed historical data
+    populate_test_results_table(db, "history.csv")
 
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
@@ -33,7 +38,7 @@ def start_server(host="0.0.0.0", port=8440):
             if not data:
                 print("No data received. Closing connection.")
                 break
-            
+
             hl7_data = process_mllp_message(data)
             if hl7_data:
                 message = parse_hl7_message(hl7_data)
@@ -44,7 +49,7 @@ def start_server(host="0.0.0.0", port=8440):
                 if category == 'PAS-admit':
                     #print('Patient {} inserted'.format(mrn))
                     db.insert_patient(mrn, int(data[0]), str(data[1]))
-                elif category == 'PAS-discharge':
+                elif category == "PAS-discharge":
                     db.discharge_patient(mrn)
                 elif category == 'LIMS':
                     start_time = datetime.now()
@@ -56,6 +61,8 @@ def start_server(host="0.0.0.0", port=8440):
                         aki = predict_with_dt(dt_model, [patient_history[0][1], label_encode(patient_history[0][2]), C1, RV1, RV1_ratio, RV2, RV2_ratio, True, D])
                         print(aki)
                     db.insert_test_result(mrn, data[0], data[1])
+
+                # print(category,mrn,data,'\n')
                     end_time =  datetime.now()
                     aki = 1
                     if aki==1:

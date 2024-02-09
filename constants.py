@@ -11,3 +11,15 @@ LABELS_MAP = {"n": 0, "y": 1}
 
 # Reverse labels map for writing the final output
 REVERSE_LABELS_MAP = {v: k for k, v in LABELS_MAP.items()}
+
+FEATURES_COLUMNS = [
+    "age",
+    "sex",
+    "C1",
+    "RV1",
+    "RV1_ratio",
+    "RV2",
+    "RV2_ratio",
+    "change_within_48hrs",
+    "D",
+]
