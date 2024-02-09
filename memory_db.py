@@ -86,7 +86,7 @@ class InMemoryDatabase():
         except sqlite3.IntegrityError:
             print(f'The features for patient {mrn} are already in the features table!')
     
-    def insert_patient(self, mrn, age, sex):
+    def insert_patient(self, mrn, age, sex, update_disk_db=True):
         """
         Insert the patient info from PAS into the in-memory database.
         Args:
@@ -95,7 +95,7 @@ class InMemoryDatabase():
             - sex {str}: Sex of the patient ('m'/'f')
         """
         query = """
-            INSERT OR IGNORE INTO patients 
+            INSERT INTO patients 
                 (mrn, age, sex) 
             VALUES 
                 (?, ?, ?)
@@ -107,8 +107,15 @@ class InMemoryDatabase():
                 (mrn, age, sex)
             )
             self.connection.commit()
+            
         except sqlite3.IntegrityError:
             print(f'Patient {mrn} is already in the patients table!')
+        
+        # if update_disk_db:
+        #     disk_conn = sqlite3.connect(ON_DISK_DB_PATH)
+        #     disk_conn.execute('INSERT OR IGNORE INTO patients (mrn, age, sex) VALUES (?, ?, ?)', (mrn, age, sex))
+        #     disk_conn.commit()
+        #     disk_conn.close()
 
 
     def insert_test_result(self, mrn, date, result):
@@ -250,7 +257,7 @@ class InMemoryDatabase():
         if not os.path.exists(ON_DISK_DB_PATH):
             print('Loading the history.csv file in memory.')
             populate_test_results_table(self, 'history.csv')
-            populate_patients_table(self, 'processed_history.csv')
+            #populate_patients_table(self, 'processed_history.csv')
         else:
             # load the on-disk db into the in-memory one
             with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
