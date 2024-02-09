@@ -233,6 +233,7 @@ class InMemoryDatabase:
             - disk_db_path {str}: the path to the database
         """
         # backs up and closes the connection
+        self.connection.commit()
         with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
             self.connection.backup(disk_connection)
 
