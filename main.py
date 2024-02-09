@@ -45,7 +45,7 @@ def start_server(mllp_address, pager_address, debug=False):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((mllp_host, int(mllp_port)))
         print(f"Connected to simulator on {mllp_address}")
-
+        #count11 = 0
         while True:
             data = sock.recv(1024)
             if not data:
@@ -72,7 +72,7 @@ def start_server(mllp_address, pager_address, debug=False):
                             count = count + 1
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
-                        D = D_value_compute(
+                        D, change_ = D_value_compute(
                             latest_creatine_result,
                             latest_creatine_date,
                             patient_history,
@@ -90,15 +90,20 @@ def start_server(mllp_address, pager_address, debug=False):
                             RV1_ratio,
                             RV2,
                             RV2_ratio,
-                            True,
+                            change_,
                             D,
                         ]
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         aki = predict_with_dt(dt_model, input)
-                        if aki[0] == "y":
-                            if debug:
-                                outputs.append((mrn, latest_creatine_date))
-                            send_pager_request(mrn, pager_address)
+                    
+                    elif len(patient_history) == 0:
+                        aki = ['n']
+                    
+                    if aki[0] == "y":
+                        #count11 =  count11 + 1
+                        if debug:
+                            outputs.append((mrn, latest_creatine_date))
+                        send_pager_request(mrn, pager_address)
                     end_time = datetime.now()
                     db.insert_test_result(mrn, data[0], data[1])
                     if debug:
@@ -110,6 +115,7 @@ def start_server(mllp_address, pager_address, debug=False):
                 sock.sendall(ack_message)
             else:
                 print("No valid MLLP message received.")
+    #print("Number of patients with AKI detected: ", count11)
 
     if debug:
         print("Patients with Historical Data", count)
