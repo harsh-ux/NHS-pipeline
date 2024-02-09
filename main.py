@@ -48,16 +48,6 @@ def start_server(mllp_address, pager_address, debug=False):
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
     #aki_lis = []
-    # Start the server
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((mllp_host, int(mllp_port)))
-        print(f"Connected to simulator on {mllp_address}")
-        #count11 = 0
-        while True:
-            data = sock.recv(1024)
-            if not data:
-                print("No data received. Closing connection.")
-                break
 
     try:
         # Start the server
