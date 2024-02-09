@@ -13,11 +13,12 @@ from utils import (
     D_value_compute,
     RV_compute,
     predict_with_dt,
+    alert_response_team,
 )
 import pandas as pd
 
 
-def start_server(host="0.0.0.0", port=8440):
+def start_server(host="0.0.0.0", port=8440, pager_port=8441):
     """
     Starts the TCP server to listen for incoming MLLP messages on the specified port.
     """
@@ -59,9 +60,15 @@ def start_server(host="0.0.0.0", port=8440):
                 elif category == "PAS-discharge":
                     db.discharge_patient(mrn)
                 elif category == "LIMS":
+                    # 1. Insert test result into db
+                    date, result = data[0], data[1]
+                    db.insert_test_result(mrn, date, result)
+                    # 2. Create Features
+                    # 2.1 Get Patient History
                     patient_history = db.get_patient_history(mrn)
                     print(patient_history)
                     print(data[0])
+                    # 2.2 Calculate required features
                     D = D_value_compute(data[1], data[0], patient_history)
                     C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
                         data[1], data[0], patient_history
@@ -77,16 +84,19 @@ def start_server(host="0.0.0.0", port=8440):
                         True,
                         D,
                     ]
+                    # 2.3 Convert to input format for DT
                     input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                    # 3. Get Prediction from DT
                     aki = predict_with_dt(dt_model, input)
                     print(aki)
+                    # 4. if predicted AKI, call the Pager
                     if aki:
                         print("Calling pager for mrn:", mrn)
-                    db.insert_test_result(mrn, data[0], data[1])
+                        alert_response_team(host, pager_port, mrn)
 
                 # print(category,mrn,data,'\n')
                 # Create and send ACK message
-                ack_message = create_acknowledgement(message)
+                ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
             else:
                 print("No valid MLLP message received.")
