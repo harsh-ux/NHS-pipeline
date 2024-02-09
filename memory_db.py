@@ -5,10 +5,10 @@ from utils import populate_test_results_table, populate_patients_table
 
 
 class InMemoryDatabase:
-    def __init__(self):
+    def __init__(self, history_load_path):
         self.connection = sqlite3.connect(":memory:")
         self.initialise_tables()
-        self.load_db()
+        self.load_db(history_load_path)
         # make sure we always have a db file
         if not os.path.exists(ON_DISK_DB_PATH):
             self.persist_db()
@@ -237,14 +237,14 @@ class InMemoryDatabase:
         with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
             self.connection.backup(disk_connection)
 
-    def load_db(self):
+    def load_db(self, history_load_path):
         """
         Load the on-disk database into the in-memory database.
         """
         # if on-disk db doesn't exist, use the csv file
         if not os.path.exists(ON_DISK_DB_PATH):
             print("Loading the history.csv file in memory.")
-            populate_test_results_table(self, "data/history.csv")
+            populate_test_results_table(self, history_load_path)
             # populate_patients_table(self, 'processed_history.csv')
         else:
             # load the on-disk db into the in-memory one
