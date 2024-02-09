@@ -183,6 +183,7 @@ def D_value_compute(creat_latest_result, d1, lis):
     # Calculating the date within 48 hours
     past_two_days = d1 - datetime.timedelta(days=2)
     prev_lis_values = []
+    change = False
     for i in range(len(lis)):
         if type(lis[i][3]) != int:
             d_ = datetime.datetime.strptime(lis[i][3], "%Y-%m-%d %H:%M:%S")
@@ -190,13 +191,17 @@ def D_value_compute(creat_latest_result, d1, lis):
             d_ = datetime.datetime.strptime(str(lis[i][3]), "%Y%m%d%H%M%S")
         if d_ <= past_two_days:
             prev_lis_values.append(lis[i][4])
+    if len(prev_lis_values) > 1:
+        change = True
+    elif len(prev_lis_values) == 1:
+        change = False
     if len(prev_lis_values) > 0:
         # Finding the minimum value in the last two days
         minimum_previous_value = min(prev_lis_values)
-        diff_D = abs(float(creat_latest_result) - float(minimum_previous_value))
-        return diff_D
+        diff_D = float(creat_latest_result) - float(minimum_previous_value)
+        return diff_D, change
     else:
-        return 0
+        return 0, change
 
 
 def RV_compute(creat_latest_result, d1, lis):
