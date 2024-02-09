@@ -22,7 +22,7 @@ def start_server(host="0.0.0.0", port=8440, pager_port=8441):
     assert db != None, "In-memory Database is not initialised properly..."
 
     # Populate the in-memory database with processed historical data
-    populate_test_results_table(db, "history.csv")
+    #populate_test_results_table(db, "history.csv")
 
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
