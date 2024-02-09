@@ -19,6 +19,5 @@ RUN chmod +x /app/main.py
 COPY messages.mllp /data/
 EXPOSE 8440
 EXPOSE 8441
-WORKDIR /app/
-CMD ./main.py --mllp=$MLLP_ADDRESS --pager=$PAGER_ADDRESS
+CMD /app/main.py --mllp=$MLLP_ADDRESS --pager=$PAGER_ADDRESS
 
