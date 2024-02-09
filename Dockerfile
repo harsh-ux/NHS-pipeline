@@ -7,17 +7,20 @@ RUN pip3 install -r /app/requirements.txt
 # copy model 
 COPY dt_model.joblib /app/
 
+# copy data
+COPY data /app/data
+
 # copy scripts
 COPY main.py /app/
 COPY constants.py /app/
 COPY utils.py /app/
 COPY memory_db.py /app/
 COPY feed_database.py /app/
-
 RUN chmod +x /app/main.py
 
 COPY messages.mllp /data/
 EXPOSE 8440
 EXPOSE 8441
-CMD /app/main.py --mllp=$MLLP_ADDRESS --pager=$PAGER_ADDRESS
+WORKDIR /app/
+CMD ./main.py --mllp=$MLLP_ADDRESS --pager=$PAGER_ADDRESS
 
