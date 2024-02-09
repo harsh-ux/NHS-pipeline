@@ -8,6 +8,9 @@ class InMemoryDatabase():
         self.connection = sqlite3.connect(':memory:')
         self.initialise_tables()
         self.load_db()
+        # make sure we always have a db file
+        if not os.path.exists(ON_DISK_DB_PATH):
+            self.persist_db()
     
 
     def initialise_tables(self):
@@ -206,10 +209,9 @@ class InMemoryDatabase():
         self.connection.commit()
         # delete from on-disk
         if update_disk_db:
-            disk_conn = sqlite3.connect(ON_DISK_DB_PATH)
-            disk_conn.execute('DELETE FROM patients WHERE mrn = ?', (mrn,))
-            disk_conn.commit()
-            disk_conn.close()
+            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                disk_connection.execute('DELETE FROM patients WHERE mrn = ?', (mrn,))
+                disk_connection.commit()
     
 
     def update_patient_features(self, mrn, **kwargs):
@@ -235,10 +237,6 @@ class InMemoryDatabase():
         Args:
             - disk_db_path {str}: the path to the database
         """
-        # create an empty db file if it does not exist already
-        if not os.path.exists(ON_DISK_DB_PATH):
-            with open(ON_DISK_DB_PATH, 'w'):
-                pass
         # backs up and closes the connection
         with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
             self.connection.backup(disk_connection)
@@ -250,11 +248,13 @@ class InMemoryDatabase():
         """
         # if on-disk db doesn't exist, use the csv file
         if not os.path.exists(ON_DISK_DB_PATH):
+            print('Loading the history.csv file in memory.')
             populate_test_results_table(self, 'history.csv')
             populate_patients_table(self, 'processed_history.csv')
         else:
             # load the on-disk db into the in-memory one
             with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                print('Loading the on-disk database in memory.')
                 disk_connection.backup(self.connection)
 
     
