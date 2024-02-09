@@ -1,5 +1,5 @@
 FROM ubuntu:jammy
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -yq install python3
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -yq install python3-pip
 
 COPY requirements.txt /app/
 RUN pip3 install -r /app/requirements.txt
