@@ -1,7 +1,12 @@
 import socket
 import hl7
+import pandas as pd
+import numpy as np
 import datetime
+from sklearn.preprocessing import LabelEncoder
+import joblib
 import csv
+from statistics import median
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 
 
@@ -153,3 +158,89 @@ def calculate_age(date_of_birth):
     age = current_date.year - dob.year - ((current_date.month, current_date.day) < (dob.month, dob.day))
     
     return age
+
+def D_value_compute(creat_latest_result, d1, lis):
+    """
+    Computes the D value, a measure based on the difference creatinine result values.
+
+    :param creat_latest_result: The latest creatinine result.
+    :param d1: The date of the latest creatinine result.
+    :param d2: The date of the previous creatinine result.
+    :param id_max: The index of the latest result in the row.
+    :param row: The row of data from the dataframe.
+    :return: The computed D value.
+    """
+    d1 = datetime.datetime.strptime(d1, '%Y%m%d%H%M%S')
+    d2 = datetime.datetime.strptime(lis[-1][3], '%Y%m%d%H%M%S')
+    #Calculating the date within 48 hours
+    past_two_days = d1 - datetime.timedelta(days = 2)
+    prev_lis_values = []
+    for i in range(len(lis)):
+        if datetime.datetime.strptime(lis[i][3], '%Y%m%d%H%M%S') <= past_two_days:
+            prev_lis_values.append(lis[i][4])
+    if len(prev_lis_values)>0:
+        #Finding the minimum value in the last two days
+        minimum_previous_value = min(prev_lis_values)
+        diff_D = abs(float(creat_latest_result) - float(minimum_previous_value))
+        return diff_D
+    else:
+        return 0
+    
+def RV_compute(creat_latest_result, d1, lis):
+    """
+    Computes the RV value, a measure based on the ratio of creatinine results.
+
+    :param d1: The date of the latest creatinine result.
+    :param d2: The date of the previous creatinine result.
+    :param id_max: The index of the latest result in the row.
+    :param row: The row of data from the dataframe.
+    :return: The computed RV value.
+    """
+    #Calculating the difference of days between the two latest tests
+    d1 = datetime.datetime.strptime(d1, '%Y%m%d%H%M%S')
+    d2 = datetime.datetime.strptime(lis[-1][3], '%Y%m%d%H%M%S')
+    diff = abs(((d2-d1).seconds)/86400 + (d2-d1).days)
+    #If difference in less than 7 days then use the minimum to compute the ratio
+    if diff<=7:
+        C1 = float(creat_latest_result)
+        minimum = float(min([float(lis[i][4]) for i in lis]))
+        assert C1/minimum is not None, "The RV value is None"
+        return C1, minimum, C1/minimum, 0, 0,  #C1, RV1, RV1_ratio, RV2, RV2_ratio
+    #Else use the median of test results
+    elif diff<=365:
+        C1 = float(creat_latest_result)
+        median = float(median([float(lis[i][4]) for i in lis]))
+        assert C1/median is not None, "The RV value is None"
+        return C1, 0, 0, median, C1/median #C1, RV1, RV1_ratio, RV2, RV2_ratio
+    else:
+        return 0
+
+def label_encode(sex):
+    """
+    Uses a Label encoder to encode categorical data.
+
+    :param column: The list of features to be encoded.
+    :return: List of encoded features.
+    """
+    if sex=='M':
+        return 0
+    else:
+        return 1
+
+def load_model(file_path):
+    """
+    Loads a machine learning model from a pickle file.
+
+    :param file_path: The path of the file where the model is stored.
+    :return: The loaded model or None if an error occurs.
+    """
+    try:
+        with open(file_path, 'rb') as file:
+            model = joblib.load(file)
+        return model
+    except FileNotFoundError:
+        print("File not found.")
+        return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
