@@ -1,8 +1,12 @@
-import socket
 import hl7
+import pandas as pd
+import numpy as np
 import datetime
+import joblib
 import csv
+from statistics import median
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
+import requests
 
 
 def process_mllp_message(data):
@@ -20,12 +24,12 @@ def parse_hl7_message(hl7_data):
     """
     Parses the HL7 message and returns the parsed message object.
     """
-    hl7_string = hl7_data.decode("utf-8").replace('\r', '\n')
+    hl7_string = hl7_data.decode("utf-8").replace("\r", "\n")
     message = hl7.parse(hl7_string)
     return message
 
 
-def create_acknowledgement(hl7_msg):
+def create_acknowledgement():
     """
     Creates an HL7 ACK message for the received message.
     """
@@ -67,22 +71,22 @@ def populate_test_results_table(db, path):
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
     """
-    with open(path, newline='') as f:
+    with open(path, newline="") as f:
         rows = csv.reader(f)
         for i, row in enumerate(rows):
             # skip header
             if i == 0:
                 continue
-            
+
             # remove empty strings
-            while row and row[-1] == '':
+            while row and row[-1] == "":
                 row.pop()
-            
+
             mrn = row[0]
             # for each date, result pair insert into the table
             for j in range(1, len(row), 2):
                 date = row[j]
-                result = float(row[j+1])
+                result = float(row[j + 1])
                 db.insert_test_result(mrn, date, result)
 
 
@@ -93,18 +97,18 @@ def populate_patients_table(db, path):
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
     """
-    with open(path, newline='') as f:
+    with open(path, newline="") as f:
         rows = csv.reader(f)
         for i, row in enumerate(rows):
             # skip header
             if i == 0:
                 continue
-            
+
             # get patient info
             mrn = row[1]
             age = row[2]
             sex = row[3]
-            
+
             # insert into the table
             db.insert_patient(mrn, age, sex)
 
@@ -117,39 +121,191 @@ def parse_system_message(message):
     Returns the category of message, MRN, [AGE, SEX] if PAS category or [DATE_BLOOD_TEST, CREATININE_VALUE] if LIMS
     """
     mrn = 0
-    category = ''
-    data = ['']*2
-    segments = str(message).split('\n')
+    category = ""
+    data = [""] * 2
+    segments = str(message).split("\n")
     if len(segments) < 4:
-        parsed_seg = segments[1].split('|')
+        parsed_seg = segments[1].split("|")
         if len(parsed_seg) > 4:
             mrn = parsed_seg[3]
-            category = 'PAS-admit'
+            category = "PAS-admit"
             date_of_birth = parsed_seg[7]
             data[0] = calculate_age(date_of_birth)
             data[1] = parsed_seg[8][0]
         else:
-            mrn = parsed_seg[3].replace('\r','')
-            category = 'PAS-discharge'
+            mrn = parsed_seg[3].replace("\r", "")
+            category = "PAS-discharge"
     else:
-        mrn = segments[1].split('|')[3]
-        category = 'LIMS'
-        data[0] = segments[2].split('|')[7] #date of blood test
-        data[1] = float(segments[3].split('|')[5])
+        mrn = segments[1].split("|")[3]
+        category = "LIMS"
+        data[0] = segments[2].split("|")[7]  # date of blood test
+        data[1] = float(segments[3].split("|")[5])
 
-    return category,mrn,data
-            
+    return category, mrn, data
+
+
 def calculate_age(date_of_birth):
     """
     Calculate age based on the date of birth provided in the format YYYYMMDD.
     """
     # Parse the date of birth string into a datetime object
     dob = datetime.datetime.strptime(date_of_birth, "%Y%m%d")
-    
+
     # Get the current date
     current_date = datetime.datetime.now()
-    
+
     # Calculate the difference between the current date and the date of birth
-    age = current_date.year - dob.year - ((current_date.month, current_date.day) < (dob.month, dob.day))
-    
+    age = (
+        current_date.year
+        - dob.year
+        - ((current_date.month, current_date.day) < (dob.month, dob.day))
+    )
+
     return age
+
+
+def D_value_compute(creat_latest_result, d1, lis):
+    """
+    Computes the D value, a measure based on the difference creatinine result values.
+
+    :param creat_latest_result: The latest creatinine result.
+    :param d1: The date of the latest creatinine result.
+    :param d2: The date of the previous creatinine result.
+    :param id_max: The index of the latest result in the row.
+    :param row: The row of data from the dataframe.
+    :return: The computed D value.
+    """
+    d1 = datetime.datetime.strptime(d1, "%Y%m%d%H%M%S")
+    if type(lis[-1][3]) != int:
+        d2 = datetime.datetime.strptime(lis[-1][3], "%Y-%m-%d %H:%M:%S")
+    else:
+        d2 = datetime.datetime.strptime(str(lis[-1][3]), "%Y%m%d%H%M%S")
+    # Calculating the date within 48 hours
+    past_two_days = d1 - datetime.timedelta(days=2)
+    prev_lis_values = []
+    for i in range(len(lis)):
+        if type(lis[i][3]) != int:
+            d_ = datetime.datetime.strptime(lis[i][3], "%Y-%m-%d %H:%M:%S")
+        else:
+            d_ = datetime.datetime.strptime(str(lis[i][3]), "%Y%m%d%H%M%S")
+        if d_ <= past_two_days:
+            prev_lis_values.append(lis[i][4])
+    if len(prev_lis_values) > 0:
+        # Finding the minimum value in the last two days
+        minimum_previous_value = min(prev_lis_values)
+        diff_D = abs(float(creat_latest_result) - float(minimum_previous_value))
+        return diff_D
+    else:
+        return 0
+
+
+def RV_compute(creat_latest_result, d1, lis):
+    """
+    Computes the RV value, a measure based on the ratio of creatinine results.
+
+    :param d1: The date of the latest creatinine result.
+    :param d2: The date of the previous creatinine result.
+    :param id_max: The index of the latest result in the row.
+    :param row: The row of data from the dataframe.
+    :return: The computed RV value.
+    """
+    # Calculating the difference of days between the two latest tests
+    d1 = datetime.datetime.strptime(d1, "%Y%m%d%H%M%S")
+    if type(lis[-1][3]) != int:
+        d2 = datetime.datetime.strptime(lis[-1][3], "%Y-%m-%d %H:%M:%S")
+    else:
+        d2 = datetime.datetime.strptime(str(lis[-1][3]), "%Y%m%d%H%M%S")
+    diff = abs(((d2 - d1).seconds) / 86400 + (d2 - d1).days)
+    # If difference in less than 7 days then use the minimum to compute the ratio
+    if diff <= 7:
+        C1 = float(creat_latest_result)
+        minimum = float(min([float(lis[i][4]) for i in range(len(lis))]))
+        assert C1 / minimum is not None, "The RV value is None"
+        return (
+            C1,
+            minimum,
+            C1 / minimum,
+            0,
+            0,
+        )  # C1, RV1, RV1_ratio, RV2, RV2_ratio
+    # Else use the median of test results
+    elif diff <= 365:
+        C1 = float(creat_latest_result)
+        median_ = float(median([float(lis[i][4]) for i in range(len(lis))]))
+        assert C1 / median_ is not None, "The RV value is None"
+        return C1, 0, 0, median_, C1 / median_  # C1, RV1, RV1_ratio, RV2, RV2_ratio
+    else:
+        return 0
+
+
+def label_encode(sex):
+    """
+    Uses a Label encoder to encode categorical data.
+
+    :param column: The list of features to be encoded.
+    :return: List of encoded features.
+    """
+    if sex == "M" or sex == "m":
+        return 0
+    elif sex == "F" or sex == "f":
+        return 1
+
+
+def send_pager_request(mrn, pager_address):
+    # Define the URL for the pager request.
+    pager_host, pager_port = strip_url(pager_address)
+
+    url = f"http://{pager_host}:{pager_port}/page"
+    headers = {"Content-Type": "text/plain"}
+
+    # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
+    data = str(mrn).encode("utf-8")
+
+    # Send the POST request with the MRN as the body.
+    response = requests.post(url, data=data, headers=headers)
+
+    # Check the response status code and print appropriate message.
+    if response.status_code == 200:
+        print(f"Request successful, server responded: {response.text}")
+    else:
+        print(
+            f"Request failed, status code: {response.status_code}, message: {response.text}"
+        )
+
+
+def load_model(file_path):
+    """
+    Loads a machine learning model from a pickle file.
+
+    :param file_path: The path of the file where the model is stored.
+    :return: The loaded model or None if an error occurs.
+    """
+    try:
+        with open(file_path, "rb") as file:
+            model = joblib.load(file)
+        return model
+    except FileNotFoundError:
+        print("File not found.")
+        return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+
+
+def strip_url(url):
+    """
+    Strips the URL and returns the host and port alone.
+    """
+    url = url.split("://")[-1]
+
+    # Split the URL by "/" to separate the host and potentially the port
+    parts = url.split("/")
+
+    # Get the host part
+    host = parts[0].strip()
+
+    # Check if the port is specified
+    if ":" in host:
+        host, port = host.split(":")
+        port = int(port)
+    return host, port
