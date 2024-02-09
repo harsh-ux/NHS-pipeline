@@ -179,12 +179,19 @@ def D_value_compute(creat_latest_result, d1, lis):
     :return: The computed D value.
     """
     d1 = datetime.datetime.strptime(d1, '%Y%m%d%H%M%S')
-    d2 = datetime.datetime.strptime(lis[-1][3], '%Y-%m-%d %H:%M:%S')
+    if type(lis[-1][3]) != int:
+        d2 = datetime.datetime.strptime(lis[-1][3], '%Y-%m-%d %H:%M:%S')
+    else:
+        d2 = datetime.datetime.strptime(str(lis[-1][3]), '%Y%m%d%H%M%S')
     #Calculating the date within 48 hours
     past_two_days = d1 - datetime.timedelta(days = 2)
     prev_lis_values = []
     for i in range(len(lis)):
-        if datetime.datetime.strptime(lis[i][3], '%Y-%m-%d %H:%M:%S') <= past_two_days:
+        if type(lis[i][3]) != int:
+            d_ = datetime.datetime.strptime(lis[i][3], '%Y-%m-%d %H:%M:%S')
+        else:
+            d_ = datetime.datetime.strptime(str(lis[i][3]), '%Y%m%d%H%M%S')
+        if d_<= past_two_days:
             prev_lis_values.append(lis[i][4])
     if len(prev_lis_values) > 0:
         # Finding the minimum value in the last two days
@@ -207,12 +214,15 @@ def RV_compute(creat_latest_result, d1, lis):
     """
     #Calculating the difference of days between the two latest tests
     d1 = datetime.datetime.strptime(d1, '%Y%m%d%H%M%S')
-    d2 = datetime.datetime.strptime(lis[-1][3], '%Y-%m-%d %H:%M:%S')
+    if type(lis[-1][3]) != int:
+        d2 = datetime.datetime.strptime(lis[-1][3], '%Y-%m-%d %H:%M:%S')
+    else:
+        d2 = datetime.datetime.strptime(str(lis[-1][3]), '%Y%m%d%H%M%S')
     diff = abs(((d2-d1).seconds)/86400 + (d2-d1).days)
     #If difference in less than 7 days then use the minimum to compute the ratio
     if diff<=7:
         C1 = float(creat_latest_result)
-        minimum = float(min([float(lis[i][4]) for i in lis]))
+        minimum = float(min([float(lis[i][4]) for i in range(len(lis))]))
         assert C1 / minimum is not None, "The RV value is None"
         return (
             C1,
@@ -238,9 +248,9 @@ def label_encode(sex):
     :param column: The list of features to be encoded.
     :return: List of encoded features.
     """
-    if sex == "M":
+    if sex == 'M' or sex == 'm':
         return 0
-    else:
+    elif sex == 'F' or sex == 'f':
         return 1
 
 import requests
@@ -262,7 +272,7 @@ def send_pager_request(mrn):
         print(f"Request failed, status code: {response.status_code}, message: {response.text}")
 
 # Example usage
-send_pager_request(12345)
+#send_pager_request(12345)
 
 def load_model(file_path):
     """

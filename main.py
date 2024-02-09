@@ -7,9 +7,10 @@ from utils import (
     parse_system_message,
 )
 from memory_db import InMemoryDatabase
-from constants import DT_MODEL_PATH, REVERSE_LABELS_MAP
+from constants import DT_MODEL_PATH, REVERSE_LABELS_MAP, FEATURES_COLUMNS
 from utils import populate_test_results_table, D_value_compute, RV_compute, predict_with_dt, label_encode, send_pager_request
 from datetime import datetime
+import pandas as pd
 
 def start_server(host="0.0.0.0", port=8440, pager_port=8441):
     """
@@ -58,16 +59,17 @@ def start_server(host="0.0.0.0", port=8440, pager_port=8441):
                         count = count + 1
                         D = D_value_compute(data[1], data[0], patient_history)
                         C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(data[1], data[0], patient_history)
-                        aki = predict_with_dt(dt_model, [patient_history[0][1], label_encode(patient_history[0][2]), C1, RV1, RV1_ratio, RV2, RV2_ratio, True, D])
-                        print(aki)
+                        features = [patient_history[0][1], label_encode(patient_history[0][2]), C1, RV1, RV1_ratio, RV2, RV2_ratio, True, D]
+                        input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                        aki = predict_with_dt(dt_model, input)
+                        #print(aki)
+                        if aki[0]=='y':
+                            print("Calling pager for mrn:", mrn)
+                            send_pager_request(mrn)   
+                            end_time =  datetime.now()
                     db.insert_test_result(mrn, data[0], data[1])
-
-                # print(category,mrn,data,'\n')
-                    end_time =  datetime.now()
-                    aki = 1
-                    if aki==1:
-                        send_pager_request(12345)                        
-                    print(end_time-start_time)
+                # print(category,mrn,data,'\n')                     
+                    #print(end_time-start_time)
                 #print(category,mrn,data,'\n')
                 # Create and send ACK message
                 ack_message = create_acknowledgement()
@@ -76,7 +78,7 @@ def start_server(host="0.0.0.0", port=8440, pager_port=8441):
                 print("No valid MLLP message received.")
 
     # print("No data", count)
-    print("Data", count)
+    print("Patients with Historical Data", count)
 def main():
     start_server()
 
