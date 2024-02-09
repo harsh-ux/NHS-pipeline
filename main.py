@@ -11,7 +11,7 @@ from constants import DT_MODEL_PATH, REVERSE_LABELS_MAP
 from utils import populate_test_results_table, D_value_compute, RV_compute, predict_with_dt, label_encode, send_pager_request
 from datetime import datetime
 
-def start_server(host="0.0.0.0", port=8440):
+def start_server(host="0.0.0.0", port=8440, pager_port=8441):
     """
     Starts the TCP server to listen for incoming MLLP messages on the specified port.
     """
@@ -70,7 +70,7 @@ def start_server(host="0.0.0.0", port=8440):
                     print(end_time-start_time)
                 #print(category,mrn,data,'\n')
                 # Create and send ACK message
-                ack_message = create_acknowledgement(message)
+                ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
             else:
                 print("No valid MLLP message received.")

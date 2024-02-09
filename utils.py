@@ -8,6 +8,8 @@ import joblib
 import csv
 from statistics import median
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
+import requests
+from datetime import timedelta
 
 
 def process_mllp_message(data):
@@ -25,12 +27,12 @@ def parse_hl7_message(hl7_data):
     """
     Parses the HL7 message and returns the parsed message object.
     """
-    hl7_string = hl7_data.decode("utf-8").replace('\r', '\n')
+    hl7_string = hl7_data.decode("utf-8").replace("\r", "\n")
     message = hl7.parse(hl7_string)
     return message
 
 
-def create_acknowledgement(hl7_msg):
+def create_acknowledgement():
     """
     Creates an HL7 ACK message for the received message.
     """
@@ -72,22 +74,22 @@ def populate_test_results_table(db, path):
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
     """
-    with open(path, newline='') as f:
+    with open(path, newline="") as f:
         rows = csv.reader(f)
         for i, row in enumerate(rows):
             # skip header
             if i == 0:
                 continue
-            
+
             # remove empty strings
-            while row and row[-1] == '':
+            while row and row[-1] == "":
                 row.pop()
-            
+
             mrn = row[0]
             # for each date, result pair insert into the table
             for j in range(1, len(row), 2):
                 date = row[j]
-                result = float(row[j+1])
+                result = float(row[j + 1])
                 db.insert_test_result(mrn, date, result)
 
 
@@ -98,18 +100,18 @@ def populate_patients_table(db, path):
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
     """
-    with open(path, newline='') as f:
+    with open(path, newline="") as f:
         rows = csv.reader(f)
         for i, row in enumerate(rows):
             # skip header
             if i == 0:
                 continue
-            
+
             # get patient info
             mrn = row[1]
             age = row[2]
             sex = row[3]
-            
+
             # insert into the table
             db.insert_patient(mrn, age, sex)
 
@@ -122,42 +124,48 @@ def parse_system_message(message):
     Returns the category of message, MRN, [AGE, SEX] if PAS category or [DATE_BLOOD_TEST, CREATININE_VALUE] if LIMS
     """
     mrn = 0
-    category = ''
-    data = ['']*2
-    segments = str(message).split('\n')
+    category = ""
+    data = [""] * 2
+    segments = str(message).split("\n")
     if len(segments) < 4:
-        parsed_seg = segments[1].split('|')
+        parsed_seg = segments[1].split("|")
         if len(parsed_seg) > 4:
             mrn = parsed_seg[3]
-            category = 'PAS-admit'
+            category = "PAS-admit"
             date_of_birth = parsed_seg[7]
             data[0] = calculate_age(date_of_birth)
             data[1] = parsed_seg[8][0]
         else:
-            mrn = parsed_seg[3].replace('\r','')
-            category = 'PAS-discharge'
+            mrn = parsed_seg[3].replace("\r", "")
+            category = "PAS-discharge"
     else:
-        mrn = segments[1].split('|')[3]
-        category = 'LIMS'
-        data[0] = segments[2].split('|')[7] #date of blood test
-        data[1] = float(segments[3].split('|')[5])
+        mrn = segments[1].split("|")[3]
+        category = "LIMS"
+        data[0] = segments[2].split("|")[7]  # date of blood test
+        data[1] = float(segments[3].split("|")[5])
 
-    return category,mrn,data
-            
+    return category, mrn, data
+
+
 def calculate_age(date_of_birth):
     """
     Calculate age based on the date of birth provided in the format YYYYMMDD.
     """
     # Parse the date of birth string into a datetime object
     dob = datetime.datetime.strptime(date_of_birth, "%Y%m%d")
-    
+
     # Get the current date
     current_date = datetime.datetime.now()
-    
+
     # Calculate the difference between the current date and the date of birth
-    age = current_date.year - dob.year - ((current_date.month, current_date.day) < (dob.month, dob.day))
-    
+    age = (
+        current_date.year
+        - dob.year
+        - ((current_date.month, current_date.day) < (dob.month, dob.day))
+    )
+
     return age
+
 
 def D_value_compute(creat_latest_result, d1, lis):
     """
@@ -178,14 +186,15 @@ def D_value_compute(creat_latest_result, d1, lis):
     for i in range(len(lis)):
         if datetime.datetime.strptime(lis[i][3], '%Y-%m-%d %H:%M:%S') <= past_two_days:
             prev_lis_values.append(lis[i][4])
-    if len(prev_lis_values)>0:
-        #Finding the minimum value in the last two days
+    if len(prev_lis_values) > 0:
+        # Finding the minimum value in the last two days
         minimum_previous_value = min(prev_lis_values)
         diff_D = abs(float(creat_latest_result) - float(minimum_previous_value))
         return diff_D
     else:
         return 0
-    
+
+
 def RV_compute(creat_latest_result, d1, lis):
     """
     Computes the RV value, a measure based on the ratio of creatinine results.
@@ -204,16 +213,23 @@ def RV_compute(creat_latest_result, d1, lis):
     if diff<=7:
         C1 = float(creat_latest_result)
         minimum = float(min([float(lis[i][4]) for i in lis]))
-        assert C1/minimum is not None, "The RV value is None"
-        return C1, minimum, C1/minimum, 0, 0,  #C1, RV1, RV1_ratio, RV2, RV2_ratio
-    #Else use the median of test results
-    elif diff<=365:
+        assert C1 / minimum is not None, "The RV value is None"
+        return (
+            C1,
+            minimum,
+            C1 / minimum,
+            0,
+            0,
+        )  # C1, RV1, RV1_ratio, RV2, RV2_ratio
+    # Else use the median of test results
+    elif diff <= 365:
         C1 = float(creat_latest_result)
         median_ = float(median([float(lis[i][4]) for i in range(len(lis))]))
         assert C1/median_ is not None, "The RV value is None"
         return C1, 0, 0, median_, C1/median_ #C1, RV1, RV1_ratio, RV2, RV2_ratio
     else:
         return 0
+
 
 def label_encode(sex):
     """
@@ -222,7 +238,7 @@ def label_encode(sex):
     :param column: The list of features to be encoded.
     :return: List of encoded features.
     """
-    if sex=='M':
+    if sex == "M":
         return 0
     else:
         return 1
@@ -247,3 +263,39 @@ def send_pager_request(mrn):
 
 # Example usage
 send_pager_request(12345)
+
+def load_model(file_path):
+    """
+    Loads a machine learning model from a pickle file.
+
+    :param file_path: The path of the file where the model is stored.
+    :return: The loaded model or None if an error occurs.
+    """
+    try:
+        with open(file_path, "rb") as file:
+            model = joblib.load(file)
+        return model
+    except FileNotFoundError:
+        print("File not found.")
+        return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+
+
+def alert_response_team(host, port, mrn):
+    """
+    Sends a page to the pager server with the given MRN.
+    """
+    url = f"http://{host}:{port}/page"
+    headers = {"Content-Type": "text/plain"}
+    try:
+        response = requests.post(url, data=str(mrn), headers=headers)
+        if response.status_code == 200:
+            print(f"Successfully paged for MRN: {mrn}")
+        else:
+            print(
+                f"Failed to page for MRN: {mrn}. Status code: {response.status_code}, Response: {response.text}"
+            )
+    except requests.RequestException as e:
+        print(f"Request failed: {e}")
