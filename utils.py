@@ -171,12 +171,12 @@ def D_value_compute(creat_latest_result, d1, lis):
     :return: The computed D value.
     """
     d1 = datetime.datetime.strptime(d1, '%Y%m%d%H%M%S')
-    d2 = datetime.datetime.strptime(lis[-1][3], '%Y%m%d%H%M%S')
+    d2 = datetime.datetime.strptime(lis[-1][3], '%Y-%m-%d %H:%M:%S')
     #Calculating the date within 48 hours
     past_two_days = d1 - datetime.timedelta(days = 2)
     prev_lis_values = []
     for i in range(len(lis)):
-        if datetime.datetime.strptime(lis[i][3], '%Y%m%d%H%M%S') <= past_two_days:
+        if datetime.datetime.strptime(lis[i][3], '%Y-%m-%d %H:%M:%S') <= past_two_days:
             prev_lis_values.append(lis[i][4])
     if len(prev_lis_values)>0:
         #Finding the minimum value in the last two days
@@ -198,7 +198,7 @@ def RV_compute(creat_latest_result, d1, lis):
     """
     #Calculating the difference of days between the two latest tests
     d1 = datetime.datetime.strptime(d1, '%Y%m%d%H%M%S')
-    d2 = datetime.datetime.strptime(lis[-1][3], '%Y%m%d%H%M%S')
+    d2 = datetime.datetime.strptime(lis[-1][3], '%Y-%m-%d %H:%M:%S')
     diff = abs(((d2-d1).seconds)/86400 + (d2-d1).days)
     #If difference in less than 7 days then use the minimum to compute the ratio
     if diff<=7:
@@ -209,9 +209,9 @@ def RV_compute(creat_latest_result, d1, lis):
     #Else use the median of test results
     elif diff<=365:
         C1 = float(creat_latest_result)
-        median = float(median([float(lis[i][4]) for i in lis]))
-        assert C1/median is not None, "The RV value is None"
-        return C1, 0, 0, median, C1/median #C1, RV1, RV1_ratio, RV2, RV2_ratio
+        median_ = float(median([float(lis[i][4]) for i in range(len(lis))]))
+        assert C1/median_ is not None, "The RV value is None"
+        return C1, 0, 0, median_, C1/median_ #C1, RV1, RV1_ratio, RV2, RV2_ratio
     else:
         return 0
 
@@ -227,20 +227,23 @@ def label_encode(sex):
     else:
         return 1
 
-def load_model(file_path):
-    """
-    Loads a machine learning model from a pickle file.
+import requests
 
-    :param file_path: The path of the file where the model is stored.
-    :return: The loaded model or None if an error occurs.
-    """
-    try:
-        with open(file_path, 'rb') as file:
-            model = joblib.load(file)
-        return model
-    except FileNotFoundError:
-        print("File not found.")
-        return None
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
+def send_pager_request(mrn):
+    # Define the URL for the pager request.
+    url = "http://0.0.0.0:8441/page"
+    
+    # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
+    data = str(mrn).encode('utf-8')
+    
+    # Send the POST request with the MRN as the body.
+    response = requests.post(url, data=data)
+    
+    # Check the response status code and print appropriate message.
+    if response.status_code == 200:
+        print(f"Request successful, server responded: {response.text}")
+    else:
+        print(f"Request failed, status code: {response.status_code}, message: {response.text}")
+
+# Example usage
+send_pager_request(12345)
