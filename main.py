@@ -26,7 +26,7 @@ import pandas as pd
 import numpy as np
 
 
-def start_server(mllp_address, pager_address, debug=False):
+def start_server(history_load_path, mllp_address, pager_address, debug=False):
     """
     Starts the TCP server to listen for incoming MLLP messages on the specified port.
     """
@@ -37,7 +37,7 @@ def start_server(mllp_address, pager_address, debug=False):
     mllp_host, mllp_port = strip_url(mllp_address)
 
     # Initialise the in-memory database
-    db = InMemoryDatabase()  # this also loads the previous history
+    db = InMemoryDatabase(history_load_path)  # this also loads the previous history
     assert db != None, "In-memory Database is not initialised properly..."
 
     # register signals for graceful shutdown
@@ -47,14 +47,14 @@ def start_server(mllp_address, pager_address, debug=False):
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
-    #aki_lis = []
+    # aki_lis = []
 
     try:
         # Start the server
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((mllp_host, int(mllp_port)))
             print(f"Connected to simulator on {mllp_address}")
-            #count11 = 0
+            # count11 = 0
             while True:
                 data = sock.recv(1024)
                 if not data:
@@ -104,7 +104,7 @@ def start_server(mllp_address, pager_address, debug=False):
                             ]
                             input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                             aki = predict_with_dt(dt_model, input)
-                        
+
                         elif len(patient_history) == 0:
                             latest_creatine_result = data[1]
                             latest_creatine_date = data[0]
@@ -127,10 +127,10 @@ def start_server(mllp_address, pager_address, debug=False):
                                 D,
                             ]
                             input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                            aki = predict_with_dt(dt_model, input)                            
-                            #aki_lis.append(aki)
+                            aki = predict_with_dt(dt_model, input)
+                            # aki_lis.append(aki)
                         if aki[0] == "y":
-                            #count11 =  count11 + 1
+                            # count11 =  count11 + 1
                             if debug:
                                 outputs.append((mrn, latest_creatine_date))
                             send_pager_request(mrn, pager_address)
@@ -149,17 +149,17 @@ def start_server(mllp_address, pager_address, debug=False):
         print(e)
     finally:
         # perform any cleanup or data persistance tasks
-        # (this is done when we encounter an exception or if the 
-        # program finishes its flow normally - so it is separate from the 
+        # (this is done when we encounter an exception or if the
+        # program finishes its flow normally - so it is separate from the
         # graceful shutdown)
         try:
             db.persist_db()
             db.close()
             print("Database persisted")
         except:
-            print('Database has already been persisted and closed.')
-    #print("Number of patients with AKI detected: ", count11)
-    #print("Labels for patients with no history: ", set(tuple(item) for item in aki_lis))
+            print("Database has already been persisted and closed.")
+    # print("Number of patients with AKI detected: ", count11)
+    # print("Labels for patients with no history: ", set(tuple(item) for item in aki_lis))
 
     if debug:
         print("Patients with Historical Data", count)
@@ -205,8 +205,14 @@ def main():
         type=bool,
         help="Whether to calculate F3 and Latency Score",
     )
+    parser.add_argument(
+        "--history",
+        default="data/history.csv",
+        type=str,
+        help="Where to load the history.csv file from",
+    )
     flags = parser.parse_args()
-    start_server(flags.mllp, flags.pager, flags.debug)
+    start_server(flags.history, flags.mllp, flags.pager, flags.debug)
 
 
 if __name__ == "__main__":

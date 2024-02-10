@@ -302,6 +302,7 @@ def strip_url(url):
     """
     Strips the URL and returns the host and port alone.
     """
+    print(url)
     url = url.split("://")[-1]
 
     # Split the URL by "/" to separate the host and potentially the port
@@ -324,4 +325,5 @@ def define_graceful_shutdown(db):
         db.close()
         print("Database persisted")
         sys.exit(0)
+
     return graceful_shutdown
