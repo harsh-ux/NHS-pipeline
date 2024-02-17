@@ -2,15 +2,21 @@ import sqlite3
 from constants import ON_DISK_DB_PATH
 import os
 from utils import populate_test_results_table, populate_patients_table
-
+import threading
 
 class InMemoryDatabase:
     def __init__(self, history_load_path):
+        self.on_disk_db_lock = threading.Lock()
+        self.disk_db_being_accessed = False
+        self.discharged_patient_mrns = []
         self.connection = sqlite3.connect(":memory:")
         self.initialise_tables()
         self.load_db(history_load_path)
         # make sure we always have a db file
         if not os.path.exists(ON_DISK_DB_PATH):
+            # create the directories if they don't already exist
+            os.makedirs('/'.join(ON_DISK_DB_PATH.split('/')[:-1]), mode=0o700, exist_ok=True)
+            # persist the database on-disk
             self.persist_db()
 
     def initialise_tables(self):
@@ -194,21 +200,30 @@ class InMemoryDatabase:
         cursor.execute(query, (mrn,))
         return cursor.fetchall()
 
-    def discharge_patient(self, mrn, update_disk_db=True):
+    def discharge_patient(self, mrn):
         """
         Remove the patient record from patients table in-memory and on-disk. Test
         results are kept in the test_results table for historic data.
         Args:
             - mrn {str}: Medical Record Number
         """
+        # save to queue for on-disk sync
+        self.discharged_patient_mrns.append(mrn)
         # delete from in-memory
         self.connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
         self.connection.commit()
-        # delete from on-disk
-        if update_disk_db:
-            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
-                disk_connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
-                disk_connection.commit()
+
+    def execute_queued_operations(self, disk_connection):
+        """
+        Perform any queued operations on the on-disk database.
+        """
+        # delete the discharged patients
+        print('Started executing queued operations.')
+        for mrn in self.discharged_patient_mrns:
+            disk_connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
+        disk_connection.commit()
+        print('Finished commiting queued operations.')
+        self.discharged_patient_mrns.clear()
 
     def update_patient_features(self, mrn, **kwargs):
         """
@@ -234,8 +249,14 @@ class InMemoryDatabase:
         """
         # backs up and closes the connection
         self.connection.commit()
-        with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
-            self.connection.backup(disk_connection)
+        with self.on_disk_db_lock:
+            self.disk_db_being_accessed = True
+            print('Lock acquired in persist_db.')
+            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                self.connection.backup(disk_connection)
+                self.execute_queued_operations(disk_connection)
+        self.disk_db_being_accessed = False
+        print('Lock released in persist_db.')
 
     def load_db(self, history_load_path):
         """
@@ -248,9 +269,14 @@ class InMemoryDatabase:
             # populate_patients_table(self, 'processed_history.csv')
         else:
             # load the on-disk db into the in-memory one
-            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
-                print("Loading the on-disk database in memory.")
-                disk_connection.backup(self.connection)
+            with self.on_disk_db_lock:
+                self.disk_db_being_accessed = True
+                print('Lock acquired in load_db.')
+                with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                    print("Loading the on-disk database in memory.")
+                    disk_connection.backup(self.connection)
+            self.disk_db_being_accessed = False
+            print('Lock released in load_db.')
 
     def close(self):
         """
