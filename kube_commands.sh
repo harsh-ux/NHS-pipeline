@@ -8,11 +8,11 @@ az aks get-credentials --resource-group imperial-swemls-spring-2024 --name imper
 kubelogin convert-kubeconfig -l azurecli
 
 kubectl --namespace=peace get pods
-docker build --platform=linux/amd64 -t imperialswemlsspring2024.azurecr.io/coursework4-peace:v1-amd64 .
+docker build --platform=linux/amd64 -t imperialswemlsspring2024.azurecr.io/coursework5-peace .
 # docker build -t imperialswemlsspring2024.azurecr.io/coursework4-peace .
-docker push imperialswemlsspring2024.azurecr.io/coursework4-peace:v1-amd64
+docker push imperialswemlsspring2024.azurecr.io/coursework5-peace
 
-kubectl apply -f coursework4.yaml
+kubectl apply -f kubernetes.yaml
 
 kubectl --namespace=peace get deployments
 

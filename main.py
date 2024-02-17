@@ -24,6 +24,7 @@ from utils import (
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import os
 
 
 def start_server(history_load_path, mllp_address, pager_address, debug=False):
@@ -188,18 +189,6 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--mllp",
-        default="0.0.0.0:8440",
-        type=str,
-        help="Port on which to get HL7 messages via MLLP",
-    )
-    parser.add_argument(
-        "--pager",
-        default="0.0.0.0:8441",
-        type=str,
-        help="Post on which to send pager requests via HTTP",
-    )
-    parser.add_argument(
         "--debug",
         default=False,
         type=bool,
@@ -211,8 +200,10 @@ def main():
         type=str,
         help="Where to load the history.csv file from",
     )
+    MLLP_LINK = os.environ.get("MLLP_ADDRESS", "0.0.0.0:8440")
+    PAGER_LINK = os.environ.get("PAGER_ADDRESS", "0.0.0.0:8441")
     flags = parser.parse_args()
-    start_server(flags.history, flags.mllp, flags.pager, flags.debug)
+    start_server(flags.history, MLLP_LINK, PAGER_LINK, flags.debug)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import sys
 from statistics import median
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 import requests
+import sys
 
 
 def process_mllp_message(data):
