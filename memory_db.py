@@ -8,7 +8,7 @@ class InMemoryDatabase:
     def __init__(self, history_load_path):
         self.on_disk_db_lock = threading.Lock()
         self.disk_db_being_accessed = False
-        self.discharged_patient_mrns = []
+        self.discharged_patient_mrns = {}
         self.connection = sqlite3.connect(":memory:")
         self.initialise_tables()
         self.load_db(history_load_path)
@@ -134,6 +134,10 @@ class InMemoryDatabase:
             VALUES 
                 (?, ?, ?)
         """
+        
+        # in case the patient was discharged before
+        if mrn in self.discharged_patient_mrns:
+            self.discharged_patient_mrns[mrn] = False
         # execute the query
         try:
             self.connection.execute(query, (mrn, date, result))
@@ -208,7 +212,7 @@ class InMemoryDatabase:
             - mrn {str}: Medical Record Number
         """
         # save to queue for on-disk sync
-        self.discharged_patient_mrns.append(mrn)
+        self.discharged_patient_mrns[mrn] = True
         # delete from in-memory
         self.connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
         self.connection.commit()
@@ -220,7 +224,8 @@ class InMemoryDatabase:
         # delete the discharged patients
         print('Started executing queued operations.')
         for mrn in self.discharged_patient_mrns:
-            disk_connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
+            if self.discharged_patient_mrns[mrn]:
+                disk_connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
         disk_connection.commit()
         print('Finished commiting queued operations.')
         self.discharged_patient_mrns.clear()
