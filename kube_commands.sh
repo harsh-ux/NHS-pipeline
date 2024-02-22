@@ -9,7 +9,6 @@ kubelogin convert-kubeconfig -l azurecli
 
 kubectl --namespace=peace get pods
 docker build --platform=linux/amd64 -t imperialswemlsspring2024.azurecr.io/coursework5-peace .
-# docker build -t imperialswemlsspring2024.azurecr.io/coursework4-peace .
 docker push imperialswemlsspring2024.azurecr.io/coursework5-peace
 
 kubectl apply -f kubernetes.yaml
@@ -19,3 +18,8 @@ kubectl --namespace=peace get deployments
 kubectl logs --namespace=peace -l app=aki-detection
 
 # kubectl --namespace=peace delete deployment aki-detection
+kubectl --namespace=peace get pods
+
+kubectl -n peace exec --stdin --tty aki-detection-c8fb5848d-t9xm7 -- /bin/bash
+
+kubectl -n peace delete deployment aki-detection 
