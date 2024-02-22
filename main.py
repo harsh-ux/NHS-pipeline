@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import socket
 import signal
 import argparse
 from joblib import load
@@ -20,6 +19,8 @@ from utils import (
     predict_with_dt,
     label_encode,
     send_pager_request,
+    connect_to_mllp,
+    read_from_mllp
 )
 from datetime import datetime
 import pandas as pd
@@ -42,10 +43,16 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
     # Initialise the in-memory database
     db = InMemoryDatabase(history_load_path)  # this also loads the previous history
     assert db != None, "In-memory Database is not initialised properly..."
+    
+    # Start the server
+    sock = connect_to_mllp(mllp_host, mllp_port)
+
+    # store the current socket for connection management
+    current_socket = {"sock":sock}
 
     # register signals for graceful shutdown
-    signal.signal(signal.SIGINT, define_graceful_shutdown(db))
-    signal.signal(signal.SIGTERM, define_graceful_shutdown(db))
+    signal.signal(signal.SIGINT, define_graceful_shutdown(db, current_socket))
+    signal.signal(signal.SIGTERM, define_graceful_shutdown(db, current_socket))
 
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
@@ -53,120 +60,123 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
     # aki_lis = []
 
     try:
-        # Start the server
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((mllp_host, int(mllp_port)))
-            print(f"Connected to simulator on {mllp_address}")
-            # count11 = 0
-            while True:
-                data = sock.recv(1024)
-                if not data:
-                    print("No data received.")
+        # count11 = 0
+        while True:
+            data, need_to_reconnect = read_from_mllp(sock)
 
-                hl7_data = process_mllp_message(data)
-                if hl7_data:
-                    print("HL7 Data received:", hl7_data)
-                    message = parse_hl7_message(hl7_data)
-                    print("Message:", message)
+            if not data:
+                print("No data received.")
+                break
 
-                    category, mrn, data = parse_system_message(
-                        message
-                    )  # category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
-                    print("Parsed values: ", category, mrn, data)
-                    if category == "PAS-admit":
-                        # print('Patient {} inserted'.format(mrn))
-                        print(f"PAS-Admit: Inserting {mrn} into db...")
-                        db.insert_patient(mrn, int(data[0]), str(data[1]))
-                    elif category == "PAS-discharge":
-                        print(f"PAS-discharge: Discharging {mrn} ...")
-                        db.discharge_patient(mrn)
-                    elif category == "LIMS":
-                        start_time = datetime.now()
-                        print("Message from LIMS! Retreiving Patient History...")
-                        patient_history = db.get_patient_history(str(mrn))
-                        if len(patient_history) != 0:
-                            print("Patient History found!")
-                            print("Patient History:", patient_history)
-                            if debug:
-                                count = count + 1
-                            latest_creatine_result = data[1]
-                            latest_creatine_date = data[0]
-                            D, change_ = D_value_compute(
-                                latest_creatine_result,
-                                latest_creatine_date,
-                                patient_history,
-                            )
-                            print("D value computed: ", D, change_)
-                            C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
-                                latest_creatine_result,
-                                latest_creatine_date,
-                                patient_history,
-                            )
-                            print(
-                                f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                            )
-                            features = [
-                                patient_history[0][1],
-                                label_encode(patient_history[0][2]),
-                                C1,
-                                RV1,
-                                RV1_ratio,
-                                RV2,
-                                RV2_ratio,
-                                change_,
-                                D,
-                            ]
-                            print("Features created...")
-                            input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                            print("Calling DT!")
-                            aki = predict_with_dt(dt_model, input)
+            if need_to_reconnect:
+                sock = connect_to_mllp()
+                # update the current socket for connection management
+                current_socket["sock"] = sock
 
-                        elif len(patient_history) == 0:
-                            print("Patient Hisotry doesn't exist...")
-                            latest_creatine_result = data[1]
-                            latest_creatine_date = data[0]
-                            D = 0
-                            change_ = 0
-                            C1 = latest_creatine_result
-                            RV1 = 0
-                            RV1_ratio = 0
-                            RV2 = 0
-                            RV2_ratio = 0
-                            print(
-                                f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                            )
-                            features = [
-                                db.get_patient(mrn)[1],
-                                label_encode(db.get_patient(mrn)[2]),
-                                C1,
-                                RV1,
-                                RV1_ratio,
-                                RV2,
-                                RV2_ratio,
-                                change_,
-                                D,
-                            ]
-                            print("Features created...")
-                            input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                            print("Calling DT!")
-                            aki = predict_with_dt(dt_model, input)
-                            # aki_lis.append(aki)
-                        if aki[0] == "y":
-                            if debug:
-                                outputs.append((mrn, latest_creatine_date))
-                            send_pager_request(mrn, pager_address)
-                        end_time = datetime.now()
-                        db.insert_test_result(mrn, data[0], data[1])
+            hl7_data = process_mllp_message(data)
+            if hl7_data:
+                print("HL7 Data received:", hl7_data)
+                message = parse_hl7_message(hl7_data)
+                print("Message:", message)
+
+                category, mrn, data = parse_system_message(
+                    message
+                )  # category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
+                print("Parsed values: ", category, mrn, data)
+                if category == "PAS-admit":
+                    # print('Patient {} inserted'.format(mrn))
+                    print(f"PAS-Admit: Inserting {mrn} into db...")
+                    db.insert_patient(mrn, int(data[0]), str(data[1]))
+                elif category == "PAS-discharge":
+                    print(f"PAS-discharge: Discharging {mrn} ...")
+                    db.discharge_patient(mrn)
+                elif category == "LIMS":
+                    start_time = datetime.now()
+                    print("Message from LIMS! Retreiving Patient History...")
+                    patient_history = db.get_patient_history(str(mrn))
+                    if len(patient_history) != 0:
+                        print("Patient History found!")
+                        print("Patient History:", patient_history)
                         if debug:
-                            latency = end_time - start_time
-                            latencies.append(latency)
+                            count = count + 1
+                        latest_creatine_result = data[1]
+                        latest_creatine_date = data[0]
+                        D, change_ = D_value_compute(
+                            latest_creatine_result,
+                            latest_creatine_date,
+                            patient_history,
+                        )
+                        print("D value computed: ", D, change_)
+                        C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
+                            latest_creatine_result,
+                            latest_creatine_date,
+                            patient_history,
+                        )
+                        print(
+                            f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
+                        )
+                        features = [
+                            patient_history[0][1],
+                            label_encode(patient_history[0][2]),
+                            C1,
+                            RV1,
+                            RV1_ratio,
+                            RV2,
+                            RV2_ratio,
+                            change_,
+                            D,
+                        ]
+                        print("Features created...")
+                        input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                        print("Calling DT!")
+                        aki = predict_with_dt(dt_model, input)
 
-                    # Create and send ACK message
-                    print("Sending ACK message...")
-                    ack_message = create_acknowledgement()
-                    sock.sendall(ack_message)
-                else:
-                    print("No valid MLLP message received.")
+                    elif len(patient_history) == 0:
+                        print("Patient Hisotry doesn't exist...")
+                        latest_creatine_result = data[1]
+                        latest_creatine_date = data[0]
+                        D = 0
+                        change_ = 0
+                        C1 = latest_creatine_result
+                        RV1 = 0
+                        RV1_ratio = 0
+                        RV2 = 0
+                        RV2_ratio = 0
+                        print(
+                            f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
+                        )
+                        features = [
+                            db.get_patient(mrn)[1],
+                            label_encode(db.get_patient(mrn)[2]),
+                            C1,
+                            RV1,
+                            RV1_ratio,
+                            RV2,
+                            RV2_ratio,
+                            change_,
+                            D,
+                        ]
+                        print("Features created...")
+                        input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                        print("Calling DT!")
+                        aki = predict_with_dt(dt_model, input)
+                        # aki_lis.append(aki)
+                    if aki[0] == "y":
+                        if debug:
+                            outputs.append((mrn, latest_creatine_date))
+                        send_pager_request(mrn, pager_address)
+                    end_time = datetime.now()
+                    db.insert_test_result(mrn, data[0], data[1])
+                    if debug:
+                        latency = end_time - start_time
+                        latencies.append(latency)
+
+                # Create and send ACK message
+                print("Sending ACK message...")
+                ack_message = create_acknowledgement()
+                sock.sendall(ack_message)
+            else:
+                print("No valid MLLP message received.")
     except Exception as e:
         print("There was an exception in the main loop..")
         traceback.print_exc()
@@ -182,6 +192,13 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
             print("Database persisted")
         except:
             print("Database has already been persisted and closed.")
+
+        try:
+            current_socket["sock"].close()
+            print("MLLP connection closed")
+        except:
+            print("MLLP connection has already been closed")
+
     # print("Number of patients with AKI detected: ", count11)
     # print("Labels for patients with no history: ", set(tuple(item) for item in aki_lis))
 

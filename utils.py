@@ -10,6 +10,7 @@ from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 import requests
 import sys
 import time
+import socket
 
 
 def process_mllp_message(data):
@@ -279,6 +280,7 @@ def send_pager_request(mrn, pager_address):
         # Check the response status code and print appropriate message.
         if response.status_code == 200:
             print(f"Request successful, server responded: {response.text}")
+            break
         else:
             print(
                 f"Attempt {retries + 1}: Request failed, status code: {response.status_code}, message: {response.text}"
@@ -328,12 +330,52 @@ def strip_url(url):
     return host, port
 
 
-def define_graceful_shutdown(db):
+def define_graceful_shutdown(db, current_socket):
     def graceful_shutdown(signum, frame):
-        print("Graceful shutdown procedure started")
+        print("Graceful shutdown procedure started.")
         db.persist_db()
         db.close()
-        print("Database persisted")
+        print("Database persisted.")
+        current_socket["sock"].close()
+        print("MLLP connection closed.")
         sys.exit(0)
 
     return graceful_shutdown
+
+def exponential_backoff_retry(func):
+    def wrapper(*args, **kwargs):
+        max_retries = 15
+        base_delay = 1  # in seconds
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except (socket.error, ConnectionResetError) as e:
+                wait_time = base_delay * (2 ** attempt)  # Exponential backoff
+                print(f"Attempt {attempt+1}/{max_retries}, failed. Error: {e}; retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+        raise Exception(f"Failed to connect after retrying {max_retries} times.")
+    return wrapper
+
+@exponential_backoff_retry
+def connect_to_mllp(host, port):
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((host, int(port)))
+        print(f"Connected to MLLP on {host}:{port}")
+        return sock
+    except socket.error as e:
+        print(f"Failed to connect to MLLP on {host}:{port}; error: {e}")
+        return None
+    
+
+def read_from_mllp(sock):
+    try:
+        data = sock.recv(1024)
+        return data, False
+    except ConnectionResetError as e:
+        print("Connection was reset, reconnecting...")
+        sock.close()
+        return None, True
+    except (socket.error, socket.timeout, OSError) as e:
+        print(f"Failed to read an MLLP message; error: {e}")
+        return None, False
