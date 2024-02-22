@@ -25,6 +25,8 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import os
+import sys
+import traceback
 
 
 def start_server(history_load_path, mllp_address, pager_address, debug=False):
@@ -59,25 +61,32 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
             while True:
                 data = sock.recv(1024)
                 if not data:
-                    print("No data received. Closing connection.")
-                    break
+                    print("No data received.")
 
                 hl7_data = process_mllp_message(data)
                 if hl7_data:
+                    print("HL7 Data received:", hl7_data)
                     message = parse_hl7_message(hl7_data)
+                    print("Message:", message)
 
                     category, mrn, data = parse_system_message(
                         message
                     )  # category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
+                    print("Parsed values: ", category, mrn, data)
                     if category == "PAS-admit":
                         # print('Patient {} inserted'.format(mrn))
+                        print(f"PAS-Admit: Inserting {mrn} into db...")
                         db.insert_patient(mrn, int(data[0]), str(data[1]))
                     elif category == "PAS-discharge":
+                        print(f"PAS-discharge: Discharging {mrn} ...")
                         db.discharge_patient(mrn)
                     elif category == "LIMS":
                         start_time = datetime.now()
+                        print("Message from LIMS! Retreiving Patient History...")
                         patient_history = db.get_patient_history(str(mrn))
                         if len(patient_history) != 0:
+                            print("Patient History found!")
+                            print("Patient History:", patient_history)
                             if debug:
                                 count = count + 1
                             latest_creatine_result = data[1]
@@ -87,10 +96,14 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                                 latest_creatine_date,
                                 patient_history,
                             )
+                            print("D value computed: ", D, change_)
                             C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
                                 latest_creatine_result,
                                 latest_creatine_date,
                                 patient_history,
+                            )
+                            print(
+                                f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
                             )
                             features = [
                                 patient_history[0][1],
@@ -103,10 +116,13 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                                 change_,
                                 D,
                             ]
+                            print("Features created...")
                             input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                            print("Calling DT!")
                             aki = predict_with_dt(dt_model, input)
 
                         elif len(patient_history) == 0:
+                            print("Patient Hisotry doesn't exist...")
                             latest_creatine_result = data[1]
                             latest_creatine_date = data[0]
                             D = 0
@@ -116,6 +132,9 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                             RV1_ratio = 0
                             RV2 = 0
                             RV2_ratio = 0
+                            print(
+                                f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
+                            )
                             features = [
                                 db.get_patient(mrn)[1],
                                 label_encode(db.get_patient(mrn)[2]),
@@ -127,11 +146,12 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                                 change_,
                                 D,
                             ]
+                            print("Features created...")
                             input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
+                            print("Calling DT!")
                             aki = predict_with_dt(dt_model, input)
                             # aki_lis.append(aki)
                         if aki[0] == "y":
-                            # count11 =  count11 + 1
                             if debug:
                                 outputs.append((mrn, latest_creatine_date))
                             send_pager_request(mrn, pager_address)
@@ -142,12 +162,15 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                             latencies.append(latency)
 
                     # Create and send ACK message
+                    print("Sending ACK message...")
                     ack_message = create_acknowledgement()
                     sock.sendall(ack_message)
                 else:
                     print("No valid MLLP message received.")
     except Exception as e:
-        print(e)
+        print("There was an exception in the main loop..")
+        traceback.print_exc()
+        sys.stderr.write(e)
     finally:
         # perform any cleanup or data persistance tasks
         # (this is done when we encounter an exception or if the

@@ -9,6 +9,7 @@ from statistics import median
 from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
 import requests
 import sys
+import time
 
 
 def process_mllp_message(data):
@@ -259,25 +260,33 @@ def label_encode(sex):
 
 
 def send_pager_request(mrn, pager_address):
+    print("Sending a page for mrn:", mrn)
     # Define the URL for the pager request.
     pager_host, pager_port = strip_url(pager_address)
+    print("Pager host and port: ", pager_host, pager_port)
 
     url = f"http://{pager_host}:{pager_port}/page"
     headers = {"Content-Type": "text/plain"}
 
     # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
     data = str(mrn).encode("utf-8")
+    retry_delay = 1  # 1 second retry delay
+    retries = 0
+    while True:
+        # Send the POST request with the MRN as the body.
+        response = requests.post(url, data=data, headers=headers)
 
-    # Send the POST request with the MRN as the body.
-    response = requests.post(url, data=data, headers=headers)
-
-    # Check the response status code and print appropriate message.
-    if response.status_code == 200:
-        print(f"Request successful, server responded: {response.text}")
-    else:
-        print(
-            f"Request failed, status code: {response.status_code}, message: {response.text}"
-        )
+        # Check the response status code and print appropriate message.
+        if response.status_code == 200:
+            print(f"Request successful, server responded: {response.text}")
+        else:
+            print(
+                f"Attempt {retries + 1}: Request failed, status code: {response.status_code}, message: {response.text}"
+            )
+            retries += 1
+            print("Retrying in", retry_delay, "seconds...")
+            retry_delay = 0.2 * (retry_delay ** 1.2) # exponent delay
+            time.sleep(retry_delay)
 
 
 def load_model(file_path):
@@ -303,7 +312,7 @@ def strip_url(url):
     """
     Strips the URL and returns the host and port alone.
     """
-    print(url)
+    print("Parsing URL:", url)
     url = url.split("://")[-1]
 
     # Split the URL by "/" to separate the host and potentially the port
@@ -321,10 +330,10 @@ def strip_url(url):
 
 def define_graceful_shutdown(db):
     def graceful_shutdown(signum, frame):
-        print('Graceful shutdown procedure started')
+        print("Graceful shutdown procedure started")
         db.persist_db()
         db.close()
-        print('Database persisted')
+        print("Database persisted")
         sys.exit(0)
 
     return graceful_shutdown
