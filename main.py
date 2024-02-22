@@ -64,16 +64,17 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
         while True:
             data, need_to_reconnect = read_from_mllp(sock)
 
-            if not data:
-                print("No data received.")
-                break
-
             if need_to_reconnect:
                 sock = connect_to_mllp()
                 # update the current socket for connection management
                 current_socket["sock"] = sock
 
-            hl7_data = process_mllp_message(data)
+            if data:
+                hl7_data = process_mllp_message(data)
+            else:
+                hl7_data = None
+                print("No data received.")
+            
             if hl7_data:
                 print("HL7 Data received:", hl7_data)
                 message = parse_hl7_message(hl7_data)
