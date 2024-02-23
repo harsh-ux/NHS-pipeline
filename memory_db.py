@@ -106,6 +106,9 @@ class InMemoryDatabase:
             VALUES 
                 (?, ?, ?)
         """
+         # in case the patient was discharged before
+        if mrn in self.discharged_patient_mrns:
+            self.discharged_patient_mrns[mrn] = False
         # execute the query
         try:
             self.connection.execute(query, (mrn, age, sex))
@@ -135,9 +138,6 @@ class InMemoryDatabase:
                 (?, ?, ?)
         """
         
-        # in case the patient was discharged before
-        if mrn in self.discharged_patient_mrns:
-            self.discharged_patient_mrns[mrn] = False
         # execute the query
         try:
             self.connection.execute(query, (mrn, date, result))
@@ -165,6 +165,17 @@ class InMemoryDatabase:
         """
         cursor = self.connection.cursor()
         cursor.execute("SELECT * FROM patients WHERE mrn = ?", (mrn,))
+        return cursor.fetchone()
+    
+    def get_test_result(self, mrn, date):
+        """
+        Query the test result table for a given mrn and date.
+        Args:
+            - mrn {str}: Medical Record Number
+            - date {str}: The date and time of the test
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM test_results WHERE mrn = ? AND date = ?", (mrn, date))
         return cursor.fetchone()
 
     def get_test_results(self, mrn):

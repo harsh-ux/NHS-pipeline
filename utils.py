@@ -342,31 +342,31 @@ def define_graceful_shutdown(db, current_socket):
 
     return graceful_shutdown
 
+
 def exponential_backoff_retry(func):
     def wrapper(*args, **kwargs):
-        max_retries = 15
         base_delay = 1  # in seconds
-        for attempt in range(max_retries):
+        attempt = 0
+        threshold = 600
+        while True:
             try:
                 return func(*args, **kwargs)
-            except (socket.error, ConnectionResetError) as e:
+            except Exception as e:
                 wait_time = base_delay * (2 ** attempt)  # Exponential backoff
-                print(f"Attempt {attempt+1}/{max_retries}, failed. Error: {e}; retrying in {wait_time} seconds...")
+                attempt += 1
+                print(f"Attempt {attempt}, failed. Error: {e}; retrying in {wait_time} seconds...")
+                wait_time = min(threshold, wait_time)
                 time.sleep(wait_time)
-        raise Exception(f"Failed to connect after retrying {max_retries} times.")
     return wrapper
+
 
 @exponential_backoff_retry
 def connect_to_mllp(host, port):
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((host, int(port)))
-        print(f"Connected to MLLP on {host}:{port}")
-        return sock
-    except socket.error as e:
-        print(f"Failed to connect to MLLP on {host}:{port}; error: {e}")
-        return None
-    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, int(port)))
+    print(f"Connected to MLLP on {host}:{port}")
+    return sock
+
 
 def read_from_mllp(sock):
     try:
@@ -376,6 +376,6 @@ def read_from_mllp(sock):
         print("Connection was reset, reconnecting...")
         sock.close()
         return None, True
-    except (socket.error, socket.timeout, OSError) as e:
+    except Exception as e:
         print(f"Failed to read an MLLP message; error: {e}")
         return None, False
