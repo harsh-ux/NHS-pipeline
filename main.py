@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import signal
+import pickle
 import argparse
 from joblib import load
 from utils import (
@@ -12,7 +13,7 @@ from utils import (
     define_graceful_shutdown,
 )
 from memory_db import InMemoryDatabase
-from constants import DT_MODEL_PATH, FEATURES_COLUMNS
+from constants import DT_MODEL_PATH, FEATURES_COLUMNS, ON_DISK_PAGER_STACK_PATH
 from utils import (
     D_value_compute,
     RV_compute,
@@ -53,8 +54,12 @@ def start_server(
     current_socket = {"sock": sock}
 
     # register signals for graceful shutdown
-    signal.signal(signal.SIGINT, define_graceful_shutdown(db, current_socket))
-    signal.signal(signal.SIGTERM, define_graceful_shutdown(db, current_socket))
+    signal.signal(
+        signal.SIGINT, define_graceful_shutdown(db, current_socket, pager_stack)
+    )
+    signal.signal(
+        signal.SIGTERM, define_graceful_shutdown(db, current_socket, pager_stack)
+    )
 
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
@@ -226,7 +231,10 @@ def start_server(
             current_socket["sock"].close()
             print("MLLP connection closed")
         except:
-            print("MLLP connection has already been closed")
+            print("MLLP connection has already been closed.")
+
+        with open(ON_DISK_PAGER_STACK_PATH, "wb") as file:
+            pickle.dump(pager_stack, file)
 
     if debug:
         print("Patients with Historical Data", count)
@@ -269,8 +277,12 @@ def main():
     MLLP_LINK = os.environ.get("MLLP_ADDRESS", "0.0.0.0:8440")
     PAGER_LINK = os.environ.get("PAGER_ADDRESS", "0.0.0.0:8441")
     flags = parser.parse_args()
+    pager_stack = []
+    if os.path.exists(ON_DISK_PAGER_STACK_PATH):
+        with open(ON_DISK_PAGER_STACK_PATH, "rb") as file:
+            pager_stack = pickle.load(file)
     start_server(
-        flags.history, MLLP_LINK, PAGER_LINK, pager_stack=[], debug=flags.debug
+        flags.history, MLLP_LINK, PAGER_LINK, pager_stack=pager_stack, debug=flags.debug
     )
 
 

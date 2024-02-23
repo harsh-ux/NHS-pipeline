@@ -11,11 +11,13 @@ from constants import (
     MLLP_END_CHAR,
     REVERSE_LABELS_MAP,
     MLLP_END_OF_BLOCK,
+    ON_DISK_PAGER_STACK_PATH,
 )
 import requests
 import sys
 import time
 import socket
+import pickle
 
 
 def process_mllp_message(data):
@@ -359,7 +361,7 @@ def strip_url(url):
     return host, port
 
 
-def define_graceful_shutdown(db, current_socket):
+def define_graceful_shutdown(db, current_socket, pager_stack):
     def graceful_shutdown(signum, frame):
         print("Graceful shutdown procedure started.")
         db.persist_db()
@@ -367,6 +369,8 @@ def define_graceful_shutdown(db, current_socket):
         print("Database persisted.")
         current_socket["sock"].close()
         print("MLLP connection closed.")
+        with open(ON_DISK_PAGER_STACK_PATH, "wb") as file:
+            pickle.dump(pager_stack, file)
         sys.exit(0)
 
     return graceful_shutdown
