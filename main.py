@@ -120,9 +120,6 @@ def start_server(
                             count = count + 1
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
-                        print("\n\n")
-                        print(latest_creatine_date)
-                        print("\n\n")
                         D, change_ = D_value_compute(
                             latest_creatine_result,
                             latest_creatine_date,
