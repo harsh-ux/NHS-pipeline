@@ -65,7 +65,7 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
             data, need_to_reconnect = read_from_mllp(sock)
 
             if need_to_reconnect:
-                sock = connect_to_mllp()
+                sock = connect_to_mllp(mllp_host, mllp_port)
                 # update the current socket for connection management
                 current_socket["sock"] = sock
 
@@ -76,9 +76,9 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                 print("No data received.")
             
             if hl7_data:
-                print("HL7 Data received:", hl7_data)
+                # print("HL7 Data received:", hl7_data)
                 message = parse_hl7_message(hl7_data)
-                print("Message:", message)
+                # print("Message:", message)
 
                 category, mrn, data = parse_system_message(
                     message
@@ -87,17 +87,28 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                 if category == "PAS-admit":
                     # print('Patient {} inserted'.format(mrn))
                     print(f"PAS-Admit: Inserting {mrn} into db...")
-                    db.insert_patient(mrn, int(data[0]), str(data[1]))
+
+                    # check if patient was inserted correctly
+                    if not db.get_patient(mrn):
+                        print(f"Failed to insert patient {mrn}, trying once more")
+                        # and try again
+                        db.insert_patient(mrn, int(data[0]), str(data[1]))
+
                 elif category == "PAS-discharge":
                     print(f"PAS-discharge: Discharging {mrn} ...")
                     db.discharge_patient(mrn)
+                    # check if patient was discharged correctly
+                    if db.get_patient(mrn):
+                        print(f"Failed to discharge patient {mrn}, trying once more")
+                        # and try again
+                        db.discharge_patient(mrn)
                 elif category == "LIMS":
                     start_time = datetime.now()
                     print("Message from LIMS! Retreiving Patient History...")
                     patient_history = db.get_patient_history(str(mrn))
                     if len(patient_history) != 0:
                         print("Patient History found!")
-                        print("Patient History:", patient_history)
+                        # print("Patient History:", patient_history)
                         if debug:
                             count = count + 1
                         latest_creatine_result = data[1]
@@ -107,15 +118,15 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                             latest_creatine_date,
                             patient_history,
                         )
-                        print("D value computed: ", D, change_)
+                        # print("D value computed: ", D, change_)
                         C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
                             latest_creatine_result,
                             latest_creatine_date,
                             patient_history,
                         )
-                        print(
-                            f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                        )
+                        # print(
+                        #     f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
+                        # )
                         features = [
                             patient_history[0][1],
                             label_encode(patient_history[0][2]),
@@ -131,9 +142,8 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-
-                    elif len(patient_history) == 0:
-                        print("Patient Hisotry doesn't exist...")
+                    elif len(patient_history) == 0 and db.get_patient(mrn):
+                        print("Patient History doesn't exist...")
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
                         D = 0
@@ -162,6 +172,8 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
                         # aki_lis.append(aki)
+                    else:
+                        print("No such patient in the patients table...")
                     if aki[0] == "y":
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
@@ -171,8 +183,13 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                     if debug:
                         latency = end_time - start_time
                         latencies.append(latency)
-
-                # Create and send ACK message
+                    
+                    # check if test result was inserted correctly
+                    if not db.get_test_result(mrn, data[0]):
+                        print(f"Failed to insert test result for {mrn} on {data[0]}, trying once more")
+                        # and try again
+                        db.insert_test_result(mrn, data[0], data[1])
+                # ack the message
                 print("Sending ACK message...")
                 ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
@@ -181,7 +198,7 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
     except Exception as e:
         print("There was an exception in the main loop..")
         traceback.print_exc()
-        sys.stderr.write(e)
+        sys.stderr.write(str(e))
     finally:
         # perform any cleanup or data persistance tasks
         # (this is done when we encounter an exception or if the
