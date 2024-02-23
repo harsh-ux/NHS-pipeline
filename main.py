@@ -89,7 +89,7 @@ def start_server(
                 if category == "PAS-admit":
                     # print('Patient {} inserted'.format(mrn))
                     print(f"PAS-Admit: Inserting {mrn} into db...")
-
+                    db.insert_patient(mrn, int(data[0]), str(data[1]))
                     # check if patient was inserted correctly
                     if not db.get_patient(mrn):
                         print(f"Failed to insert patient {mrn}, trying once more")

@@ -303,7 +303,7 @@ def send_pager_request(mrn, latest_creatine_date, pager_address, pager_stack):
 
     # First try to send the current MRN
     print("Sending current MRN: ", mrn)
-    if attempt_send_request(mrn):
+    if attempt_send_request(mrn, latest_creatine_date):
         # If successful, attempt to send all requests in the stack
         print("Trying to send remaining pages...")
         while len(pager_stack) != 0:
