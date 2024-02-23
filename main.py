@@ -87,27 +87,21 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                 if category == "PAS-admit":
                     # print('Patient {} inserted'.format(mrn))
                     print(f"PAS-Admit: Inserting {mrn} into db...")
-                    db.insert_patient(mrn, int(data[0]), str(data[1]))
 
                     # check if patient was inserted correctly
-                    if db.get_patient(mrn):
-                        # Create and send ACK message
-                        print("Sending ACK message for PAS-admit...")
-                        ack_message = create_acknowledgement()
-                        sock.sendall(ack_message)
-                    else:
-                        print("ACK message for PAS-admit NOT sent (failed to insert)...")
+                    if not db.get_patient(mrn):
+                        print(f"Failed to insert patient {mrn}, trying once more")
+                        # and try again
+                        db.insert_patient(mrn, int(data[0]), str(data[1]))
+
                 elif category == "PAS-discharge":
                     print(f"PAS-discharge: Discharging {mrn} ...")
                     db.discharge_patient(mrn)
                     # check if patient was discharged correctly
                     if db.get_patient(mrn):
-                        print("ACK message for PAS-discharge NOT sent (failed to delete)...")
-                    else:
-                        # Create and send ACK message
-                        print("Sending ACK message for PAS-discharge...")
-                        ack_message = create_acknowledgement()
-                        sock.sendall(ack_message)
+                        print(f"Failed to discharge patient {mrn}, trying once more")
+                        # and try again
+                        db.discharge_patient(mrn)
                 elif category == "LIMS":
                     start_time = datetime.now()
                     print("Message from LIMS! Retreiving Patient History...")
@@ -191,13 +185,14 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                         latencies.append(latency)
                     
                     # check if test result was inserted correctly
-                    if db.get_test_result(mrn, data[0]):
-                        # Create and send ACK message
-                        print("Sending ACK message for LIMS...")
-                        ack_message = create_acknowledgement()
-                        sock.sendall(ack_message)
-                    else:
-                        print("ACK message for LIMS NOT sent (failed to insert)...")
+                    if not db.get_test_result(mrn, data[0]):
+                        print(f"Failed to insert test result for {mrn} on {data[0]}, trying once more")
+                        # and try again
+                        db.insert_test_result(mrn, data[0], data[1])
+                # ack the message
+                print("Sending ACK message...")
+                ack_message = create_acknowledgement()
+                sock.sendall(ack_message)
             else:
                 print("No valid MLLP message received.")
     except Exception as e:
