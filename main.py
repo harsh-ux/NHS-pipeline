@@ -20,7 +20,7 @@ from utils import (
     label_encode,
     send_pager_request,
     connect_to_mllp,
-    read_from_mllp
+    read_from_mllp,
 )
 from datetime import datetime
 import pandas as pd
@@ -30,7 +30,9 @@ import sys
 import traceback
 
 
-def start_server(history_load_path, mllp_address, pager_address, debug=False):
+def start_server(
+    history_load_path, mllp_address, pager_address, pager_stack, debug=False
+):
     """
     Starts the TCP server to listen for incoming MLLP messages on the specified port.
     """
@@ -43,12 +45,12 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
     # Initialise the in-memory database
     db = InMemoryDatabase(history_load_path)  # this also loads the previous history
     assert db != None, "In-memory Database is not initialised properly..."
-    
+
     # Start the server
     sock = connect_to_mllp(mllp_host, mllp_port)
 
     # store the current socket for connection management
-    current_socket = {"sock":sock}
+    current_socket = {"sock": sock}
 
     # register signals for graceful shutdown
     signal.signal(signal.SIGINT, define_graceful_shutdown(db, current_socket))
@@ -74,7 +76,7 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
             else:
                 hl7_data = None
                 print("No data received.")
-            
+
             if hl7_data:
                 # print("HL7 Data received:", hl7_data)
                 message = parse_hl7_message(hl7_data)
@@ -113,6 +115,9 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                             count = count + 1
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
+                        print("\n\n")
+                        print(latest_creatine_date)
+                        print("\n\n")
                         D, change_ = D_value_compute(
                             latest_creatine_result,
                             latest_creatine_date,
@@ -174,19 +179,25 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                         # aki_lis.append(aki)
                     else:
                         print("No such patient in the patients table...")
+                    # If predicted AKI, send the Pager request
+                    # and update the pager stack
                     if aki[0] == "y":
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
-                        send_pager_request(mrn, pager_address)
+                        pager_stack = send_pager_request(
+                            mrn, latest_creatine_date, pager_address, pager_stack
+                        )
                     end_time = datetime.now()
                     db.insert_test_result(mrn, data[0], data[1])
                     if debug:
                         latency = end_time - start_time
                         latencies.append(latency)
-                    
+
                     # check if test result was inserted correctly
                     if not db.get_test_result(mrn, data[0]):
-                        print(f"Failed to insert test result for {mrn} on {data[0]}, trying once more")
+                        print(
+                            f"Failed to insert test result for {mrn} on {data[0]}, trying once more"
+                        )
                         # and try again
                         db.insert_test_result(mrn, data[0], data[1])
                 # ack the message
@@ -216,9 +227,6 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
             print("MLLP connection closed")
         except:
             print("MLLP connection has already been closed")
-
-    # print("Number of patients with AKI detected: ", count11)
-    # print("Labels for patients with no history: ", set(tuple(item) for item in aki_lis))
 
     if debug:
         print("Patients with Historical Data", count)
@@ -261,7 +269,9 @@ def main():
     MLLP_LINK = os.environ.get("MLLP_ADDRESS", "0.0.0.0:8440")
     PAGER_LINK = os.environ.get("PAGER_ADDRESS", "0.0.0.0:8441")
     flags = parser.parse_args()
-    start_server(flags.history, MLLP_LINK, PAGER_LINK, flags.debug)
+    start_server(
+        flags.history, MLLP_LINK, PAGER_LINK, pager_stack=[], debug=flags.debug
+    )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 # MLLP constants
 MLLP_START_CHAR = b"\x0b"
 MLLP_END_CHAR = b"\x1c\x0d"
+MLLP_END_OF_BLOCK = 0x1C
 
 # Path to load and store the trained Decision Tree model
 DT_MODEL_PATH = "dt_model.joblib"
