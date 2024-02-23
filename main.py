@@ -87,13 +87,12 @@ def start_server(history_load_path, mllp_address, pager_address, debug=False):
                 if category == "PAS-admit":
                     # print('Patient {} inserted'.format(mrn))
                     print(f"PAS-Admit: Inserting {mrn} into db...")
-
+                    db.insert_patient(mrn, int(data[0]), str(data[1]))
                     # check if patient was inserted correctly
                     if not db.get_patient(mrn):
                         print(f"Failed to insert patient {mrn}, trying once more")
                         # and try again
                         db.insert_patient(mrn, int(data[0]), str(data[1]))
-
                 elif category == "PAS-discharge":
                     print(f"PAS-discharge: Discharging {mrn} ...")
                     db.discharge_patient(mrn)
