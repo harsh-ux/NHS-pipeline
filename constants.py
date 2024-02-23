@@ -1,10 +1,12 @@
 # MLLP constants
 MLLP_START_CHAR = b"\x0b"
 MLLP_END_CHAR = b"\x1c\x0d"
+MLLP_END_OF_BLOCK = 0x1C
 
 # Path to load and store the trained Decision Tree model
 DT_MODEL_PATH = "dt_model.joblib"
 ON_DISK_DB_PATH = "state/database.db"
+ON_DISK_PAGER_STACK_PATH = "state/pager.pkl"
 
 # Map for AKI Label
 LABELS_MAP = {"n": 0, "y": 1}

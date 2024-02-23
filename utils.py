@@ -6,11 +6,18 @@ import joblib
 import csv
 import sys
 from statistics import median
-from constants import MLLP_START_CHAR, MLLP_END_CHAR, REVERSE_LABELS_MAP
+from constants import (
+    MLLP_START_CHAR,
+    MLLP_END_CHAR,
+    REVERSE_LABELS_MAP,
+    MLLP_END_OF_BLOCK,
+    ON_DISK_PAGER_STACK_PATH,
+)
 import requests
 import sys
 import time
 import socket
+import pickle
 
 
 def process_mllp_message(data):
@@ -260,7 +267,7 @@ def label_encode(sex):
         return 1
 
 
-def send_pager_request(mrn, pager_address):
+def send_pager_request(mrn, latest_creatine_date, pager_address, pager_stack):
     print("Sending a page for mrn:", mrn)
     # Define the URL for the pager request.
     pager_host, pager_port = strip_url(pager_address)
@@ -269,26 +276,50 @@ def send_pager_request(mrn, pager_address):
     url = f"http://{pager_host}:{pager_port}/page"
     headers = {"Content-Type": "text/plain"}
 
-    # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
-    data = str(mrn).encode("utf-8")
-    retry_delay = 1  # 1 second retry delay
-    retries = 0
-    while True:
-        # Send the POST request with the MRN as the body.
-        response = requests.post(url, data=data, headers=headers)
+    def attempt_send_request(mrn, latest_creatine_date):
+        # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
+        data = str(mrn) + "," + str(latest_creatine_date)
+        data = data.encode("utf-8")
+        retry_delay = 1  # 1 second retry delay
+        retries = 0
+        max_retries = 3
+        is_success = False
+        while retries < max_retries:
+            # Send the POST request with the MRN as the body.
+            response = requests.post(url, data=data, headers=headers)
 
-        # Check the response status code and print appropriate message.
-        if response.status_code == 200:
-            print(f"Request successful, server responded: {response.text}")
-            break
-        else:
-            print(
-                f"Attempt {retries + 1}: Request failed, status code: {response.status_code}, message: {response.text}"
-            )
-            retries += 1
-            print("Retrying in", retry_delay, "seconds...")
-            retry_delay = 0.2 * (retry_delay ** 1.2) # exponent delay
-            time.sleep(retry_delay)
+            # Check the response status code and print appropriate message.
+            if response.status_code == 200:
+                print(f"Request successful, server responded: {response.text}")
+                is_success = True
+                break
+            else:
+                print(
+                    f"Attempt {retries + 1}: Request failed, status code: {response.status_code}, message: {response.text}"
+                )
+                retries += 1
+                print("Retrying in", retry_delay, "seconds...")
+                retry_delay = retry_delay * retries
+                time.sleep(retry_delay)
+        return is_success
+
+    # First try to send the current MRN
+    print("Sending current MRN: ", mrn)
+    if attempt_send_request(mrn, latest_creatine_date):
+        # If successful, attempt to send all requests in the stack
+        print("Trying to send remaining pages...")
+        while len(pager_stack) != 0:
+            next_mrn, creatine_date = pager_stack.pop()
+            if not attempt_send_request(next_mrn, creatine_date):
+                # If a request fails, stop and re-append remaining requests including the failed one
+                pager_stack.append(next_mrn, creatine_date)  # Re-add the failed MRN
+                break
+    else:
+        # If initial request fails, append it to the stack
+        pager_stack.append((mrn, latest_creatine_date))
+    if len(pager_stack) != 0:
+        print("Current pager stack:", pager_stack)
+    return pager_stack
 
 
 def load_model(file_path):
@@ -330,7 +361,7 @@ def strip_url(url):
     return host, port
 
 
-def define_graceful_shutdown(db, current_socket):
+def define_graceful_shutdown(db, current_socket, pager_stack):
     def graceful_shutdown(signum, frame):
         print("Graceful shutdown procedure started.")
         db.persist_db()
@@ -338,6 +369,8 @@ def define_graceful_shutdown(db, current_socket):
         print("Database persisted.")
         current_socket["sock"].close()
         print("MLLP connection closed.")
+        with open(ON_DISK_PAGER_STACK_PATH, "wb") as file:
+            pickle.dump(pager_stack, file)
         sys.exit(0)
 
     return graceful_shutdown
@@ -352,11 +385,16 @@ def exponential_backoff_retry(func):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                wait_time = base_delay * (2 ** attempt)  # Exponential backoff
+                wait_time = base_delay * (2**attempt)  # Exponential backoff
                 attempt += 1
-                print(f"Attempt {attempt}, failed. Error: {e}; retrying in {wait_time} seconds...")
-                wait_time = min(threshold, wait_time)
+                print(
+                    f"Attempt {attempt}, failed. Error: {e}; retrying in {wait_time} seconds..."
+                )
+                wait_time = min(
+                    threshold, wait_time
+                )  # ensures that the wait time is max 10 mins
                 time.sleep(wait_time)
+
     return wrapper
 
 
@@ -370,8 +408,11 @@ def connect_to_mllp(host, port):
 
 def read_from_mllp(sock):
     try:
-        data = sock.recv(1024)
-        return data, False
+        buffer = b""
+        while MLLP_END_OF_BLOCK not in buffer:
+            data = sock.recv(1024)
+            buffer += data
+        return buffer, False
     except ConnectionResetError as e:
         print("Connection was reset, reconnecting...")
         sock.close()
