@@ -30,8 +30,6 @@ import os
 import sys
 import traceback
 
-#testing MR revert v1.0
-
 def start_server(
     history_load_path, mllp_address, pager_address, pager_stack, debug=False
 ):
