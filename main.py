@@ -173,7 +173,7 @@ def start_server(
                         print("Patient History doesn't exist...")
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
-                        D = 0
+                        D = 0db.get_patient(mrn)[1]
                         change_ = 0
                         C1 = latest_creatine_result
                         RV1 = 0
