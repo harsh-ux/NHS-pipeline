@@ -25,6 +25,10 @@ spec:
     metadata:
       labels:
         app: aki-detection
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '8000'
     spec:
       containers:
       - name: aki-detection
@@ -48,6 +52,9 @@ spec:
           requests:
             memory: 1Gi
             cpu: 1
+        ports:
+        - containerPort: 8000
+          name: metrics
       initContainers:
       - name: copy-hospital-history
         image: imperialswemlsspring2024.azurecr.io/coursework5-history
@@ -67,3 +74,17 @@ spec:
       - name: aki-detection-state
         persistentVolumeClaim:
           claimName: aki-detection-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aki-detection-metrics
+  namespace: peace
+spec:
+  selector:
+    app: aki-detection
+  ports:
+  - name: metrics
+    protocol: TCP
+    port: 8000
+    targetPort: metrics
