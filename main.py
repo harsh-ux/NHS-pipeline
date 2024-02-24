@@ -3,7 +3,6 @@
 import signal
 import pickle
 import argparse
-import threading
 from joblib import load
 from utils import (
     process_mllp_message,
@@ -30,22 +29,6 @@ import numpy as np
 import os
 import sys
 import traceback
-from prometheus_client import start_http_server, Summary, Counter
-
-REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
-SOCKET_CONNECTIONS_COUNTER = Counter('socket_connections_total', 'Total number of socket connections made')
-
-def start_metrics_server(port=8000):
-    """
-    Starts a background thread to serve Prometheus metrics.
-    """
-    start_http_server(port)
-
-def increment_socket_predictions():
-    """
-    Increments the Socket connections counter.
-    """
-    SOCKET_CONNECTIONS_COUNTER.inc()
 
 #testing MR revert
 
@@ -67,7 +50,6 @@ def start_server(
 
     # Start the server
     sock = connect_to_mllp(mllp_host, mllp_port)
-    increment_socket_predictions()
 
     # store the current socket for connection management
     current_socket = {"sock": sock}
@@ -83,8 +65,6 @@ def start_server(
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
-    #mlp_model = load(MLP_MODEL_PATH)
-    #assert mlp_model != None, "MLP Model is not loaded properly..."
     # aki_lis = []
 
     try:
@@ -169,7 +149,7 @@ def start_server(
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-                    elif (len(patient_history) == None or len(patient_history) == 0) and db.get_patient(mrn):
+                    elif len(patient_history) == 0 and db.get_patient(mrn):
                         print("Patient History doesn't exist...")
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
@@ -199,45 +179,6 @@ def start_server(
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
                         # aki_lis.append(aki)
-                    # elif (db.get_patient(mrn) ==  None or len(db.get_patient(mrn))==0):
-                    #     if debug:
-                    #         count = count + 1
-                    #     if (len(patient_history) == None or len(patient_history) == 0):
-                    #         aki = 0
-                    #     elif (len(patient_history) != None or len(patient_history) != 0):
-                    #         ## Call MLP model
-                    #         pass
-                    #     latest_creatine_result = data[1]
-                    #     latest_creatine_date = data[0]
-                    #     D, change_ = D_value_compute(
-                    #         latest_creatine_result,
-                    #         latest_creatine_date,
-                    #         patient_history,
-                    #     )
-                    #     # print("D value computed: ", D, change_)
-                    #     C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
-                    #         latest_creatine_result,
-                    #         latest_creatine_date,
-                    #         patient_history,
-                    #     )
-                    #     # print(
-                    #     #     f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                    #     # )
-                    #     features = [
-                    #         patient_history[0][1],
-                    #         label_encode(patient_history[0][2]),
-                    #         C1,
-                    #         RV1,
-                    #         RV1_ratio,
-                    #         RV2,
-                    #         RV2_ratio,
-                    #         change_,
-                    #         D,
-                    #     ]
-                    #     print("Features created...")
-                    #     input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                    #     print("Calling DT!")
-                    #     aki = predict_with_dt(dt_model, input)
                     else:
                         print("No such patient in the patients table...")
                     # If predicted AKI, send the Pager request
@@ -330,10 +271,6 @@ def main():
         type=str,
         help="Where to load the history.csv file from",
     )
-    # Start the metrics server in a background thread
-    metrics_thread = threading.Thread(target=start_metrics_server, args=(8000,))
-    metrics_thread.daemon = True
-    metrics_thread.start()
     MLLP_LINK = os.environ.get("MLLP_ADDRESS", "0.0.0.0:8440")
     PAGER_LINK = os.environ.get("PAGER_ADDRESS", "0.0.0.0:8441")
     flags = parser.parse_args()

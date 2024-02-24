@@ -74,27 +74,6 @@ def predict_with_dt(dt_model, data):
 
     return labels
 
-def predict_with_mlp(mlp_model, data):
-    """
-    Following data needs to be passed:
-    [
-        "C1",
-        "RV1",
-        "RV1_ratio",
-        "RV2",
-        "RV2_ratio",
-        "D"
-    ]
-    Predict with the DT Model on the data.
-    Returns the predicted labels.
-    """
-    y_pred = mlp_model.predict(data)
-
-    # Map the predictions to labels
-    labels = [REVERSE_LABELS_MAP[item] for item in y_pred]
-
-    return labels
-
 
 def populate_test_results_table(db, path):
     """
@@ -351,12 +330,8 @@ def load_model(file_path):
     :return: The loaded model or None if an error occurs.
     """
     try:
-        if file_path.endswith(".joblib"): 
-            with open(file_path, "rb") as file:
-                model = joblib.load(file)
-        elif file_path.endswith(".pkl"):
-            with open(file_path, "rb") as file:
-                model = pickle.load(file)
+        with open(file_path, "rb") as file:
+            model = joblib.load(file)
         return model
     except FileNotFoundError:
         print("File not found.")

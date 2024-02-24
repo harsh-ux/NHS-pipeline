@@ -7,7 +7,6 @@ MLLP_END_OF_BLOCK = 0x1C
 DT_MODEL_PATH = "dt_model.joblib"
 ON_DISK_DB_PATH = "state/database.db"
 ON_DISK_PAGER_STACK_PATH = "state/pager.pkl"
-MLP_MODEL_PATH = "mlp_without_age_sex.pkl"
 
 # Map for AKI Label
 LABELS_MAP = {"n": 0, "y": 1}
