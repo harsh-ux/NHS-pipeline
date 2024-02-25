@@ -32,8 +32,11 @@ import sys
 import traceback
 from prometheus_client import start_http_server, Summary, Counter
 
-REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
-SOCKET_CONNECTIONS_COUNTER = Counter('socket_connections_total', 'Total number of socket connections made')
+REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request")
+SOCKET_CONNECTIONS_COUNTER = Counter(
+    "socket_connections_total", "Total number of socket connections made"
+)
+
 
 def start_metrics_server(port=8000):
     """
@@ -41,13 +44,16 @@ def start_metrics_server(port=8000):
     """
     start_http_server(port)
 
+
 def increment_socket_predictions():
     """
     Increments the Socket connections counter.
     """
     SOCKET_CONNECTIONS_COUNTER.inc()
 
-#testing MR revert
+
+# testing MR revert
+
 
 def start_server(
     history_load_path, mllp_address, pager_address, pager_stack, debug=False
@@ -83,8 +89,8 @@ def start_server(
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
-    #mlp_model = load(MLP_MODEL_PATH)
-    #assert mlp_model != None, "MLP Model is not loaded properly..."
+    # mlp_model = load(MLP_MODEL_PATH)
+    # assert mlp_model != None, "MLP Model is not loaded properly..."
     # aki_lis = []
 
     try:
@@ -169,11 +175,13 @@ def start_server(
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-                    elif (len(patient_history) == None or len(patient_history) == 0) and db.get_patient(mrn):
+                    elif (
+                        len(patient_history) == None or len(patient_history) == 0
+                    ) and db.get_patient(mrn):
                         print("Patient History doesn't exist...")
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
-                        D = 0db.get_patient(mrn)[1]
+                        D = 0
                         change_ = 0
                         C1 = latest_creatine_result
                         RV1 = 0
