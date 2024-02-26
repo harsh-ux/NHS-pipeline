@@ -19,6 +19,8 @@ from constants import (
     FEATURES_COLUMNS,
     ON_DISK_PAGER_STACK_PATH,
     MLP_MODEL_PATH,
+    DEFAULT_AGE,
+    DEFAULT_SEX,
 )
 from utils import (
     D_value_compute,
@@ -67,7 +69,10 @@ PATIENT_DISCHARGE_COUNTER = Counter(
 BLOOD_TEST_AVERAGE = Gauge("blood_test_average", "Average Value of blood test")
 LATENCY_AVERAGE = Gauge("latency_average", "Average Value of latency")
 FAILURE_COUNTER = Counter("total_failures", "Total number of failures occurred")
-LATENCY_EXCEEDS_COUNTER = Counter('latency_exceeds_3_seconds_total', 'Counts how many times latency exceeded 3 seconds')
+LATENCY_EXCEEDS_COUNTER = Counter(
+    "latency_exceeds_3_seconds_total",
+    "Counts how many times latency exceeded 3 seconds",
+)
 TOTAL_BLOOD_TESTS = Counter("total_blood_test", "Total number of blood tests received")
 TOTAL_POSITIVE_AKI = Counter(
     "total_positive_akis", "Total number of positive AKI instances detected"
@@ -248,33 +253,42 @@ def start_server(
                         aki = predict_with_dt(dt_model, input)
 
                     else:
-                        # TODO Add MLP Model here
                         count_mlp = count_mlp + 1
+                        print("No such patient in the patients table. Inserting with default values...")
+
+                        # insert the patient into the DB.
+                        db.insert_patient(mrn, DEFAULT_AGE, DEFAULT_SEX)
+                        print(f"Inserted new patient with MRN: {mrn}!")
                         aki = ["n"]
-                        print("No such patient in the patients table...")
+
                     # If predicted AKI, send the Pager request
                     # and update the pager stack
                     if aki[0] == "y":
+                        pager_stack = send_pager_request(
+                            mrn, latest_creatine_date, pager_address, pager_stack
+                        )
+
+                        if debug:
+                            outputs.append((mrn, latest_creatine_date))
+
                         # prometheus related
                         increment_aki_counter(TOTAL_POSITIVE_AKI)
                         aki_count = aki_count + 1
                         calculate_positive_aki_rate(
                             count_blood, aki_count, AKI_POSITIVE_RATE
                         )
-                        
-                        if debug:
-                            outputs.append((mrn, latest_creatine_date))
 
-                        pager_stack = send_pager_request(
-                            mrn, latest_creatine_date, pager_address, pager_stack
-                        )
                     end_time = datetime.now()
                     latency = end_time - start_time
                     if latency.total_seconds() > 3:
                         increment_latency_counter(LATENCY_EXCEEDS_COUNTER)
                     latency_time = latency_time + latency.total_seconds()
-                    calculate_latency_average(latency_time, count_blood, LATENCY_AVERAGE)
+                    calculate_latency_average(
+                        latency_time, count_blood, LATENCY_AVERAGE
+                    )
+                    # insert the current test result into the DB
                     db.insert_test_result(mrn, data[0], data[1])
+                    
                     if debug:
                         latency = end_time - start_time
                         latencies.append(latency)
@@ -286,6 +300,8 @@ def start_server(
                         )
                         # and try again
                         db.insert_test_result(mrn, data[0], data[1])
+                # after every message persist the data
+                db.persist_db()
                 # ack the message
                 print("Sending ACK message...")
                 ack_message = create_acknowledgement()
