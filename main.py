@@ -117,10 +117,8 @@ def start_server(
     assert dt_model != None, "Model is not loaded properly..."
     mlp_model = load(MLP_MODEL_PATH)
     assert mlp_model != None, "MLP Model is not loaded properly..."
-    # aki_lis = []
 
     try:
-        # count11 = 0
         count_mlp = 0
         while True:
             data, need_to_reconnect = read_from_mllp(sock)
@@ -129,6 +127,7 @@ def start_server(
                 sock = connect_to_mllp(mllp_host, mllp_port)
                 # update the current socket for connection management
                 current_socket["sock"] = sock
+                increment_socket_connections(SOCKET_RECONNECTIONS_COUNTER)
 
             if data:
                 hl7_data = process_mllp_message(data)
@@ -169,10 +168,13 @@ def start_server(
                     start_time = datetime.now()
                     print("Message from LIMS! Retreiving Patient History...")
                     patient_history = db.get_patient_history(str(mrn))
+
+                    # prometheus related upates
                     total_blood_sum = total_blood_sum + data[1]
                     count_blood = count_blood + 1
                     process_blood_test(total_blood_sum, count_blood, BLOOD_TEST_AVERAGE)
                     increment_blood_test_counter(TOTAL_BLOOD_TESTS)
+
                     if len(patient_history) != 0:
                         print("Patient History found!")
                         # print("Patient History:", patient_history)
@@ -249,6 +251,7 @@ def start_server(
                     # If predicted AKI, send the Pager request
                     # and update the pager stack
                     if aki[0] == "y":
+                        # prometheus related
                         increment_aki_counter(TOTAL_POSITIVE_AKI)
                         aki_count = aki_count + 1
                         calculate_positive_aki_rate(
@@ -256,6 +259,7 @@ def start_server(
                         )
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
+
                         pager_stack = send_pager_request(
                             mrn, latest_creatine_date, pager_address, pager_stack
                         )
@@ -277,7 +281,7 @@ def start_server(
                 ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
                 # print("Number of times the patient is not there in table", count_mlp)
-                print("-" * 40)
+                print("-" * 80)
             else:
                 print("No valid MLLP message received.")
     except Exception as e:
@@ -339,12 +343,12 @@ def main():
         type=bool,
         help="Whether to calculate F3 and Latency Score",
     )
-    # parser.add_argument(
-    #     "--history",
-    #     default="data/history.csv",
-    #     type=str,
-    #     help="Where to load the history.csv file from",
-    # )
+    parser.add_argument(
+        "--history",
+        default="data/history.csv",
+        type=str,
+        help="Where to load the history.csv file from",
+    )
     # Start the metrics server in a background thread
     metrics_thread = threading.Thread(target=start_metrics_server, args=(8000,))
     metrics_thread.daemon = True
