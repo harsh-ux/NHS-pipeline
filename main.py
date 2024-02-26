@@ -272,7 +272,7 @@ def start_server(
                     latency = end_time - start_time
                     if latency.total_seconds() > 3:
                         increment_latency_counter(LATENCY_EXCEEDS_COUNTER)
-                    latency_time = latency_time.total_seconds() + latency
+                    latency_time = latency_time + latency.total_seconds()
                     calculate_latency_average(latency_time, count_blood, LATENCY_AVERAGE)
                     db.insert_test_result(mrn, data[0], data[1])
                     if debug:
