@@ -67,7 +67,10 @@ PATIENT_DISCHARGE_COUNTER = Counter(
 BLOOD_TEST_AVERAGE = Gauge("blood_test_average", "Average Value of blood test")
 LATENCY_AVERAGE = Gauge("latency_average", "Average Value of latency")
 FAILURE_COUNTER = Counter("total_failures", "Total number of failures occurred")
-LATENCY_EXCEEDS_COUNTER = Counter('latency_exceeds_3_seconds_total', 'Counts how many times latency exceeded 3 seconds')
+LATENCY_EXCEEDS_COUNTER = Counter(
+    "latency_exceeds_3_seconds_total",
+    "Counts how many times latency exceeded 3 seconds",
+)
 TOTAL_BLOOD_TESTS = Counter("total_blood_test", "Total number of blood tests received")
 TOTAL_POSITIVE_AKI = Counter(
     "total_positive_akis", "Total number of positive AKI instances detected"
@@ -261,7 +264,7 @@ def start_server(
                         calculate_positive_aki_rate(
                             count_blood, aki_count, AKI_POSITIVE_RATE
                         )
-                        
+
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
 
@@ -273,7 +276,9 @@ def start_server(
                     if latency.total_seconds() > 3:
                         increment_latency_counter(LATENCY_EXCEEDS_COUNTER)
                     latency_time = latency_time + latency.total_seconds()
-                    calculate_latency_average(latency_time, count_blood, LATENCY_AVERAGE)
+                    calculate_latency_average(
+                        latency_time, count_blood, LATENCY_AVERAGE
+                    )
                     db.insert_test_result(mrn, data[0], data[1])
                     if debug:
                         latency = end_time - start_time
@@ -286,6 +291,8 @@ def start_server(
                         )
                         # and try again
                         db.insert_test_result(mrn, data[0], data[1])
+                # after every message persist the data
+                db.persist_db()
                 # ack the message
                 print("Sending ACK message...")
                 ack_message = create_acknowledgement()
