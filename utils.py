@@ -74,6 +74,7 @@ def predict_with_dt(dt_model, data):
 
     return labels
 
+
 def predict_with_mlp(mlp_model, data):
     """
     Following data needs to be passed:
@@ -301,7 +302,7 @@ def send_pager_request(mrn, latest_creatine_date, pager_address, pager_stack):
         # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
         data = str(mrn) + "," + str(latest_creatine_date)
         data = data.encode("utf-8")
-        retry_delay = 1  # 1 second retry delay
+        retry_delay = 0.4  # 0.4 second retry delay so we meet latency
         retries = 0
         max_retries = 3
         is_success = False
@@ -351,7 +352,7 @@ def load_model(file_path):
     :return: The loaded model or None if an error occurs.
     """
     try:
-        if file_path.endswith(".joblib"): 
+        if file_path.endswith(".joblib"):
             with open(file_path, "rb") as file:
                 model = joblib.load(file)
         elif file_path.endswith(".pkl"):
