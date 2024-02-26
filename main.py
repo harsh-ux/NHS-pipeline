@@ -41,6 +41,8 @@ from prometheus_metrics import (
     increment_aki_counter,
     calculate_positive_aki_rate,
     increment_failure_counter,
+    calculate_latency_average,
+    increment_latency_counter,
 )
 from datetime import datetime
 import pandas as pd
@@ -63,8 +65,9 @@ PATIENT_DISCHARGE_COUNTER = Counter(
     "total_discharged_patients", "Total number of discharged patients"
 )
 BLOOD_TEST_AVERAGE = Gauge("blood_test_average", "Average Value of blood test")
+LATENCY_AVERAGE = Gauge("latency_average", "Average Value of latency")
 FAILURE_COUNTER = Counter("total_failures", "Total number of failures occurred")
-
+LATENCY_EXCEEDS_COUNTER = Counter('latency_exceeds_3_seconds_total', 'Counts how many times latency exceeded 3 seconds')
 TOTAL_BLOOD_TESTS = Counter("total_blood_test", "Total number of blood tests received")
 TOTAL_POSITIVE_AKI = Counter(
     "total_positive_akis", "Total number of positive AKI instances detected"
@@ -97,6 +100,7 @@ def start_server(
     total_blood_sum = 0.0
     count_blood = 0
     aki_count = 0
+    latency_time = 0
     # Start the server
     sock = connect_to_mllp(mllp_host, mllp_port)
     increment_socket_connections(SOCKET_RECONNECTIONS_COUNTER)
@@ -257,6 +261,7 @@ def start_server(
                         calculate_positive_aki_rate(
                             count_blood, aki_count, AKI_POSITIVE_RATE
                         )
+                        
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
 
@@ -264,6 +269,11 @@ def start_server(
                             mrn, latest_creatine_date, pager_address, pager_stack
                         )
                     end_time = datetime.now()
+                    latency = end_time - start_time
+                    if latency.total_seconds() > 3:
+                        increment_latency_counter(LATENCY_EXCEEDS_COUNTER)
+                    latency_time = latency_time + latency
+                    calculate_latency_average(latency_time, count_blood, LATENCY_AVERAGE)
                     db.insert_test_result(mrn, data[0], data[1])
                     if debug:
                         latency = end_time - start_time

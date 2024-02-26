@@ -61,3 +61,16 @@ def calculate_positive_aki_rate(total_messages, positive_aki, aki_positive_gauge
     """
     rate = positive_aki / total_messages
     aki_positive_gauge.set(rate)
+
+def calculate_latency_average(total_sum, count_blood, latency_gauge):
+    """
+    Calculates the average latency
+    """
+    rate = total_sum / count_blood
+    latency_gauge.set(rate)
+
+def increment_latency_counter(LATENCY_MISS_COUNTER):
+    """
+    Increments the total number of instances where latency was greater than 3s.
+    """
+    LATENCY_MISS_COUNTER.inc()
