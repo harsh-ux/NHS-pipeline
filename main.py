@@ -19,6 +19,8 @@ from constants import (
     FEATURES_COLUMNS,
     ON_DISK_PAGER_STACK_PATH,
     MLP_MODEL_PATH,
+    DEFAULT_AGE,
+    DEFAULT_SEX,
 )
 from utils import (
     D_value_compute,
@@ -251,13 +253,24 @@ def start_server(
                         aki = predict_with_dt(dt_model, input)
 
                     else:
-                        # TODO Add MLP Model here
                         count_mlp = count_mlp + 1
+                        print("No such patient in the patients table. Inserting with default values...")
+
+                        # insert the patient into the DB.
+                        db.insert_patient(mrn, DEFAULT_AGE, DEFAULT_SEX)
+                        print(f"Inserted new patient with MRN: {mrn}!")
                         aki = ["n"]
-                        print("No such patient in the patients table...")
+
                     # If predicted AKI, send the Pager request
                     # and update the pager stack
                     if aki[0] == "y":
+                        pager_stack = send_pager_request(
+                            mrn, latest_creatine_date, pager_address, pager_stack
+                        )
+
+                        if debug:
+                            outputs.append((mrn, latest_creatine_date))
+
                         # prometheus related
                         increment_aki_counter(TOTAL_POSITIVE_AKI)
                         aki_count = aki_count + 1
@@ -265,12 +278,6 @@ def start_server(
                             count_blood, aki_count, AKI_POSITIVE_RATE
                         )
 
-                        if debug:
-                            outputs.append((mrn, latest_creatine_date))
-
-                        pager_stack = send_pager_request(
-                            mrn, latest_creatine_date, pager_address, pager_stack
-                        )
                     end_time = datetime.now()
                     latency = end_time - start_time
                     if latency.total_seconds() > 3:
@@ -279,7 +286,9 @@ def start_server(
                     calculate_latency_average(
                         latency_time, count_blood, LATENCY_AVERAGE
                     )
+                    # insert the current test result into the DB
                     db.insert_test_result(mrn, data[0], data[1])
+                    
                     if debug:
                         latency = end_time - start_time
                         latencies.append(latency)
