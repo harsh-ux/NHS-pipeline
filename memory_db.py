@@ -157,6 +157,18 @@ class InMemoryDatabase:
         cursor.execute("SELECT * FROM features WHERE mrn = ?", (mrn,))
         return cursor.fetchone()
 
+    def database_loaded(self):
+        """
+        Query the patients table to check if it is currently loaded
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM test_results")
+        count = cursor.fetchone()[0]
+        if count>0:
+            return True
+        else:
+            return False   
+    
     def get_patient(self, mrn):
         """
         Query the patients table for a given mrn.

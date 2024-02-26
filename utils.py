@@ -78,12 +78,12 @@ def predict_with_mlp(mlp_model, data):
     """
     Following data needs to be passed:
     [
-        "C1",
         "RV1",
-        "RV1_ratio",
         "RV2",
+        "RV1_ratio",
         "RV2_ratio",
-        "D"
+        "D_value",
+        "C_value"
     ]
     Predict with the DT Model on the data.
     Returns the predicted labels.
@@ -208,6 +208,7 @@ def D_value_compute(creat_latest_result, d1, lis):
     :return: The computed D value.
     """
     d1 = datetime.datetime.strptime(d1, "%Y%m%d%H%M%S")
+    print(lis)
     if type(lis[-1][3]) != int:
         d2 = datetime.datetime.strptime(lis[-1][3], "%Y-%m-%d %H:%M:%S")
     else:
@@ -248,6 +249,7 @@ def RV_compute(creat_latest_result, d1, lis):
     """
     # Calculating the difference of days between the two latest tests
     d1 = datetime.datetime.strptime(d1, "%Y%m%d%H%M%S")
+    print(lis)
     if type(lis[-1][3]) != int:
         d2 = datetime.datetime.strptime(lis[-1][3], "%Y-%m-%d %H:%M:%S")
     else:

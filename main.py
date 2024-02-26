@@ -14,7 +14,7 @@ from utils import (
     define_graceful_shutdown,
 )
 from memory_db import InMemoryDatabase
-from constants import DT_MODEL_PATH, FEATURES_COLUMNS, ON_DISK_PAGER_STACK_PATH
+from constants import DT_MODEL_PATH, FEATURES_COLUMNS, ON_DISK_PAGER_STACK_PATH, MLP_MODEL_PATH
 from utils import (
     D_value_compute,
     RV_compute,
@@ -23,6 +23,14 @@ from utils import (
     send_pager_request,
     connect_to_mllp,
     read_from_mllp,
+    predict_with_mlp,
+)
+from prometheus_metrics import (
+    start_metrics_server, increment_socket_connections, 
+    increment_message_counter, increment_patient_admit_counter, 
+    increment_patient_discharge, process_blood_test,
+    increment_blood_test_counter, increment_aki_counter,
+    calculate_positive_aki_rate, increment_failure_counter, 
 )
 from datetime import datetime
 import pandas as pd
@@ -30,22 +38,21 @@ import numpy as np
 import os
 import sys
 import traceback
-from prometheus_client import start_http_server, Summary, Counter
+from prometheus_client import start_http_server, Summary, Counter, Gauge
 
 REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
-SOCKET_CONNECTIONS_COUNTER = Counter('socket_connections_total', 'Total number of socket connections made')
-
-def start_metrics_server(port=8000):
-    """
-    Starts a background thread to serve Prometheus metrics.
-    """
-    start_http_server(port)
-
-def increment_socket_predictions():
-    """
-    Increments the Socket connections counter.
-    """
-    SOCKET_CONNECTIONS_COUNTER.inc()
+SOCKET_RECONNECTIONS_COUNTER = Gauge('socket_reconnections_total', 'Total number of socket reconnections made')
+SOCKET_RECONNECTIONS_COUNTER.set(-1)
+MESSAGE_COUNTER = Counter('total_messages', 'Total number of messages received')
+PATIENT_ADMIT_COUNTER = Counter('total_admitted_patients', 'Total number of admitted patients')
+PATIENT_DISCHARGE_COUNTER = Counter('total_discharged_patients', 'Total number of discharged patients')
+BLOOD_TEST_AVERAGE = Gauge('blood_test_average', 'Average Value of blood test')
+FAILURE_COUNTER = Counter('total_failures', 'Total number of failures occurred')
+# FAILURE_COUNTER = Gauge('total_failures', 'Total number of failures occurred')
+# FAILURE_COUNTER.set(-1)
+TOTAL_BLOOD_TESTS = Counter('total_blood_test', 'Total number of blood tests received')
+TOTAL_POSITIVE_AKI = Counter('total_positive_akis', 'Total number of positive AKI instances detected')
+AKI_POSITIVE_RATE = Gauge('positive_AKI_rate', 'Positive AKI rate')
 
 
 def start_server(
@@ -62,11 +69,20 @@ def start_server(
 
     # Initialise the in-memory database
     db = InMemoryDatabase(history_load_path)  # this also loads the previous history
-    assert db != None, "In-memory Database is not initialised properly..."
 
+    if db.database_loaded() == True:
+        print("Database loaded correctly")
+    else:
+        print("Database not loaded properly")
+
+    assert db != None, "In-memory Database is not initialised properly..."
+    # Variables to keep track of the total sum and count of blood test values
+    total_blood_sum = 0.0
+    count_blood = 0
+    aki_count = 0
     # Start the server
     sock = connect_to_mllp(mllp_host, mllp_port)
-    increment_socket_predictions()
+    increment_socket_connections(SOCKET_RECONNECTIONS_COUNTER)
 
     # store the current socket for connection management
     current_socket = {"sock": sock}
@@ -82,12 +98,13 @@ def start_server(
     # Load the model once for use through out
     dt_model = load(DT_MODEL_PATH)
     assert dt_model != None, "Model is not loaded properly..."
-    #mlp_model = load(MLP_MODEL_PATH)
-    #assert mlp_model != None, "MLP Model is not loaded properly..."
+    mlp_model = load(MLP_MODEL_PATH)
+    assert mlp_model != None, "MLP Model is not loaded properly..."
     # aki_lis = []
 
     try:
         # count11 = 0
+        count_mlp = 0
         while True:
             data, need_to_reconnect = read_from_mllp(sock)
 
@@ -111,7 +128,9 @@ def start_server(
                     message
                 )  # category is type of system message and data consists of age sex if PAS admit or date of blood test and creatanine result
                 print("Parsed values: ", category, mrn, data)
+                increment_message_counter(MESSAGE_COUNTER)
                 if category == "PAS-admit":
+                    increment_patient_admit_counter(PATIENT_ADMIT_COUNTER)
                     # print('Patient {} inserted'.format(mrn))
                     print(f"PAS-Admit: Inserting {mrn} into db...")
                     db.insert_patient(mrn, int(data[0]), str(data[1]))
@@ -121,6 +140,7 @@ def start_server(
                         # and try again
                         db.insert_patient(mrn, int(data[0]), str(data[1]))
                 elif category == "PAS-discharge":
+                    increment_patient_discharge(PATIENT_DISCHARGE_COUNTER)
                     print(f"PAS-discharge: Discharging {mrn} ...")
                     db.discharge_patient(mrn)
                     # check if patient was discharged correctly
@@ -132,6 +152,10 @@ def start_server(
                     start_time = datetime.now()
                     print("Message from LIMS! Retreiving Patient History...")
                     patient_history = db.get_patient_history(str(mrn))
+                    total_blood_sum = total_blood_sum + data[1]
+                    count_blood = count_blood + 1
+                    process_blood_test(total_blood_sum, count_blood, BLOOD_TEST_AVERAGE)
+                    increment_blood_test_counter(TOTAL_BLOOD_TESTS)
                     if len(patient_history) != 0:
                         print("Patient History found!")
                         # print("Patient History:", patient_history)
@@ -168,11 +192,11 @@ def start_server(
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-                    elif (len(patient_history) == None or len(patient_history) == 0) and db.get_patient(mrn):
+                    elif (patient_history == None or len(patient_history) == 0) and db.get_patient(mrn):
                         print("Patient History doesn't exist...")
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
-                        D = 0db.get_patient(mrn)[1]
+                        D = 0
                         change_ = 0
                         C1 = latest_creatine_result
                         RV1 = 0
@@ -198,14 +222,7 @@ def start_server(
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
                         # aki_lis.append(aki)
-                    # elif (db.get_patient(mrn) ==  None or len(db.get_patient(mrn))==0):
-                    #     if debug:
-                    #         count = count + 1
-                    #     if (len(patient_history) == None or len(patient_history) == 0):
-                    #         aki = 0
-                    #     elif (len(patient_history) != None or len(patient_history) != 0):
-                    #         ## Call MLP model
-                    #         pass
+                    # elif (patient_history != None or len(patient_history) != 0) and db.get_patient(mrn)==None:
                     #     latest_creatine_result = data[1]
                     #     latest_creatine_date = data[0]
                     #     D, change_ = D_value_compute(
@@ -223,25 +240,29 @@ def start_server(
                     #     #     f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
                     #     # )
                     #     features = [
-                    #         patient_history[0][1],
-                    #         label_encode(patient_history[0][2]),
-                    #         C1,
                     #         RV1,
-                    #         RV1_ratio,
                     #         RV2,
+                    #         RV1_ratio,
                     #         RV2_ratio,
-                    #         change_,
                     #         D,
+                    #         C1,
                     #     ]
                     #     print("Features created...")
                     #     input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                    #     print("Calling DT!")
-                    #     aki = predict_with_dt(dt_model, input)
+                    #     print("Calling MLP!")
+                    #     aki = predict_with_mlp(mlp_model, input)
+
                     else:
+                        #TODO Add MLP Model here
+                        count_mlp = count_mlp + 1
+                        aki = ['n']
                         print("No such patient in the patients table...")
                     # If predicted AKI, send the Pager request
                     # and update the pager stack
                     if aki[0] == "y":
+                        increment_aki_counter(TOTAL_POSITIVE_AKI)
+                        aki_count = aki_count + 1
+                        calculate_positive_aki_rate(count_blood, aki_count, AKI_POSITIVE_RATE)
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
                         pager_stack = send_pager_request(
@@ -264,9 +285,11 @@ def start_server(
                 print("Sending ACK message...")
                 ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
+                #print("Number of times the patient is not there in table", count_mlp)
             else:
                 print("No valid MLLP message received.")
     except Exception as e:
+        increment_failure_counter(FAILURE_COUNTER)
         print("There was an exception in the main loop..")
         traceback.print_exc()
         sys.stderr.write(str(e))
@@ -279,6 +302,7 @@ def start_server(
             db.persist_db()
             db.close()
             print("Database persisted")
+            print("Number of times MLP condition satisfied:", count_mlp)
         except:
             print("Database has already been persisted and closed.")
 
