@@ -350,16 +350,17 @@ def main():
         type=bool,
         help="Whether to calculate F3 and Latency Score",
     )
-    parser.add_argument(
-        "--history",
-        default="data/history.csv",
-        type=str,
-        help="Where to load the history.csv file from",
-    )
+    # parser.add_argument(
+    #     "--history",
+    #     default="data/history.csv",
+    #     type=str,
+    #     help="Where to load the history.csv file from",
+    # )
     # Start the metrics server in a background thread
     metrics_thread = threading.Thread(target=start_metrics_server, args=(8000,))
     metrics_thread.daemon = True
     metrics_thread.start()
+    HISTORY_PATH = os.environ.get("HISTORY_PATH", "data/history.csv")
     MLLP_LINK = os.environ.get("MLLP_ADDRESS", "0.0.0.0:8440")
     PAGER_LINK = os.environ.get("PAGER_ADDRESS", "0.0.0.0:8441")
     flags = parser.parse_args()
@@ -368,7 +369,7 @@ def main():
         with open(ON_DISK_PAGER_STACK_PATH, "rb") as file:
             pager_stack = pickle.load(file)
     start_server(
-        flags.history, MLLP_LINK, PAGER_LINK, pager_stack=pager_stack, debug=flags.debug
+        HISTORY_PATH, MLLP_LINK, PAGER_LINK, pager_stack=pager_stack, debug=flags.debug
     )
 
 
