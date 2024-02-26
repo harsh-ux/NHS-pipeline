@@ -38,6 +38,8 @@ spec:
           - ./main.py
           - "--history=/hospital-history/history.csv"
         env:
+        - name: HISTORY_PATH
+          value: /hospital-history/history.csv
         - name: MLLP_ADDRESS
           value: peace-simulator.coursework5:8440
         - name: PAGER_ADDRESS
