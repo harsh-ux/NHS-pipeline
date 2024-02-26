@@ -14,7 +14,12 @@ from utils import (
     define_graceful_shutdown,
 )
 from memory_db import InMemoryDatabase
-from constants import DT_MODEL_PATH, FEATURES_COLUMNS, ON_DISK_PAGER_STACK_PATH, MLP_MODEL_PATH
+from constants import (
+    DT_MODEL_PATH,
+    FEATURES_COLUMNS,
+    ON_DISK_PAGER_STACK_PATH,
+    MLP_MODEL_PATH,
+)
 from utils import (
     D_value_compute,
     RV_compute,
@@ -26,11 +31,16 @@ from utils import (
     predict_with_mlp,
 )
 from prometheus_metrics import (
-    start_metrics_server, increment_socket_connections, 
-    increment_message_counter, increment_patient_admit_counter, 
-    increment_patient_discharge, process_blood_test,
-    increment_blood_test_counter, increment_aki_counter,
-    calculate_positive_aki_rate, increment_failure_counter, 
+    start_metrics_server,
+    increment_socket_connections,
+    increment_message_counter,
+    increment_patient_admit_counter,
+    increment_patient_discharge,
+    process_blood_test,
+    increment_blood_test_counter,
+    increment_aki_counter,
+    calculate_positive_aki_rate,
+    increment_failure_counter,
 )
 from datetime import datetime
 import pandas as pd
@@ -40,22 +50,26 @@ import sys
 import traceback
 from prometheus_client import start_http_server, Summary, Counter, Gauge
 
-REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
-SOCKET_RECONNECTIONS_COUNTER = Gauge('socket_reconnections_total', 'Total number of socket reconnections made')
+REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request")
+SOCKET_RECONNECTIONS_COUNTER = Gauge(
+    "socket_reconnections_total", "Total number of socket reconnections made"
+)
 SOCKET_RECONNECTIONS_COUNTER.set(-1)
-MESSAGE_COUNTER = Counter('total_messages', 'Total number of messages received')
-PATIENT_ADMIT_COUNTER = Counter('total_admitted_patients', 'Total number of admitted patients')
-PATIENT_DISCHARGE_COUNTER = Counter('total_discharged_patients', 'Total number of discharged patients')
-BLOOD_TEST_AVERAGE = Gauge('blood_test_average', 'Average Value of blood test')
-FAILURE_COUNTER = Counter('total_failures', 'Total number of failures occurred')
-# FAILURE_COUNTER = Gauge('total_failures', 'Total number of failures occurred')
-# FAILURE_COUNTER.set(-1)
-TOTAL_BLOOD_TESTS = Counter('total_blood_test', 'Total number of blood tests received')
-TOTAL_POSITIVE_AKI = Counter('total_positive_akis', 'Total number of positive AKI instances detected')
-AKI_POSITIVE_RATE = Gauge('positive_AKI_rate', 'Positive AKI rate')
+MESSAGE_COUNTER = Counter("total_messages", "Total number of messages received")
+PATIENT_ADMIT_COUNTER = Counter(
+    "total_admitted_patients", "Total number of admitted patients"
+)
+PATIENT_DISCHARGE_COUNTER = Counter(
+    "total_discharged_patients", "Total number of discharged patients"
+)
+BLOOD_TEST_AVERAGE = Gauge("blood_test_average", "Average Value of blood test")
+FAILURE_COUNTER = Counter("total_failures", "Total number of failures occurred")
 
-
-# testing MR revert
+TOTAL_BLOOD_TESTS = Counter("total_blood_test", "Total number of blood tests received")
+TOTAL_POSITIVE_AKI = Counter(
+    "total_positive_akis", "Total number of positive AKI instances detected"
+)
+AKI_POSITIVE_RATE = Gauge("positive_AKI_rate", "Positive AKI rate")
 
 
 def start_server(
@@ -195,7 +209,9 @@ def start_server(
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-                    elif (patient_history == None or len(patient_history) == 0) and db.get_patient(mrn):
+                    elif (
+                        patient_history == None or len(patient_history) == 0
+                    ) and db.get_patient(mrn):
                         print("Patient History doesn't exist...")
                         latest_creatine_result = data[1]
                         latest_creatine_date = data[0]
@@ -224,48 +240,20 @@ def start_server(
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-                        # aki_lis.append(aki)
-                    # elif (patient_history != None or len(patient_history) != 0) and db.get_patient(mrn)==None:
-                    #     latest_creatine_result = data[1]
-                    #     latest_creatine_date = data[0]
-                    #     D, change_ = D_value_compute(
-                    #         latest_creatine_result,
-                    #         latest_creatine_date,
-                    #         patient_history,
-                    #     )
-                    #     # print("D value computed: ", D, change_)
-                    #     C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
-                    #         latest_creatine_result,
-                    #         latest_creatine_date,
-                    #         patient_history,
-                    #     )
-                    #     # print(
-                    #     #     f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                    #     # )
-                    #     features = [
-                    #         RV1,
-                    #         RV2,
-                    #         RV1_ratio,
-                    #         RV2_ratio,
-                    #         D,
-                    #         C1,
-                    #     ]
-                    #     print("Features created...")
-                    #     input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
-                    #     print("Calling MLP!")
-                    #     aki = predict_with_mlp(mlp_model, input)
 
                     else:
-                        #TODO Add MLP Model here
+                        # TODO Add MLP Model here
                         count_mlp = count_mlp + 1
-                        aki = ['n']
+                        aki = ["n"]
                         print("No such patient in the patients table...")
                     # If predicted AKI, send the Pager request
                     # and update the pager stack
                     if aki[0] == "y":
                         increment_aki_counter(TOTAL_POSITIVE_AKI)
                         aki_count = aki_count + 1
-                        calculate_positive_aki_rate(count_blood, aki_count, AKI_POSITIVE_RATE)
+                        calculate_positive_aki_rate(
+                            count_blood, aki_count, AKI_POSITIVE_RATE
+                        )
                         if debug:
                             outputs.append((mrn, latest_creatine_date))
                         pager_stack = send_pager_request(
@@ -288,7 +276,8 @@ def start_server(
                 print("Sending ACK message...")
                 ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
-                #print("Number of times the patient is not there in table", count_mlp)
+                # print("Number of times the patient is not there in table", count_mlp)
+                print("-" * 40)
             else:
                 print("No valid MLLP message received.")
     except Exception as e:
