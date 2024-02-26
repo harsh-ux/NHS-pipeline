@@ -208,7 +208,6 @@ def D_value_compute(creat_latest_result, d1, lis):
     :return: The computed D value.
     """
     d1 = datetime.datetime.strptime(d1, "%Y%m%d%H%M%S")
-    print(lis)
     if type(lis[-1][3]) != int:
         d2 = datetime.datetime.strptime(lis[-1][3], "%Y-%m-%d %H:%M:%S")
     else:
@@ -249,7 +248,6 @@ def RV_compute(creat_latest_result, d1, lis):
     """
     # Calculating the difference of days between the two latest tests
     d1 = datetime.datetime.strptime(d1, "%Y%m%d%H%M%S")
-    print(lis)
     if type(lis[-1][3]) != int:
         d2 = datetime.datetime.strptime(lis[-1][3], "%Y-%m-%d %H:%M:%S")
     else:
