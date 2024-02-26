@@ -33,9 +33,8 @@ spec:
       containers:
       - name: aki-detection
         image: imperialswemlsspring2024.azurecr.io/coursework5-peace
-        command: ["/bin/sh", "-c"]
+        command: ["/app/main.py"]
         args:
-          - ./main.py
           - "--history=/hospital-history/history.csv"
         env:
         - name: HISTORY_PATH
