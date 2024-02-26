@@ -13,6 +13,8 @@ docker push imperialswemlsspring2024.azurecr.io/coursework5-peace
 
 kubectl apply -f kubernetes.yaml
 
+#For checking the prometheus metrics, open another terminal tab and paste the following command. Instead of aki-detection-66f7857596-98gr9 use the current pod name. Then open localhost:8000
+kubectl -n peace port-forward aki-detection-66f7857596-98gr9 8000:8000
 kubectl --namespace=peace get deployments
 
 kubectl logs --namespace=peace -l app=aki-detection

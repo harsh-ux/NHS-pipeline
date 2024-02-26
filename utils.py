@@ -78,12 +78,12 @@ def predict_with_mlp(mlp_model, data):
     """
     Following data needs to be passed:
     [
-        "C1",
         "RV1",
-        "RV1_ratio",
         "RV2",
+        "RV1_ratio",
         "RV2_ratio",
-        "D"
+        "D_value",
+        "C_value"
     ]
     Predict with the DT Model on the data.
     Returns the predicted labels.
