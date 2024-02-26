@@ -74,6 +74,7 @@ def predict_with_dt(dt_model, data):
 
     return labels
 
+
 def predict_with_mlp(mlp_model, data):
     """
     Following data needs to be passed:
@@ -103,6 +104,7 @@ def populate_test_results_table(db, path):
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
     """
+    print(f"Loading test results from {path}...")
     with open(path, newline="") as f:
         rows = csv.reader(f)
         for i, row in enumerate(rows):
@@ -351,7 +353,7 @@ def load_model(file_path):
     :return: The loaded model or None if an error occurs.
     """
     try:
-        if file_path.endswith(".joblib"): 
+        if file_path.endswith(".joblib"):
             with open(file_path, "rb") as file:
                 model = joblib.load(file)
         elif file_path.endswith(".pkl"):

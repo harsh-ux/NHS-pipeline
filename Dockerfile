@@ -9,7 +9,7 @@ COPY dt_model.joblib /app/
 COPY mlp_without_age_sex.pkl /app/
 
 # copy data
-COPY data /app/data
+# COPY data /app/data
 
 # copy scripts
 COPY main.py /app/
