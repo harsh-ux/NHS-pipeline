@@ -134,7 +134,7 @@ def start_server(
 
             if need_to_reconnect:
                 sock = connect_to_mllp(mllp_host, mllp_port)
-                # update the current socket for connection management
+                # update the current socket for connection management - handle restart and reconnection
                 current_socket["sock"] = sock
                 increment_socket_connections(SOCKET_RECONNECTIONS_COUNTER)
 
@@ -145,9 +145,7 @@ def start_server(
                 print("No data received.")
 
             if hl7_data:
-                # print("HL7 Data received:", hl7_data)
                 message = parse_hl7_message(hl7_data)
-                # print("Message:", message)
 
                 category, mrn, data = parse_system_message(
                     message
@@ -186,7 +184,6 @@ def start_server(
 
                     if len(patient_history) != 0:
                         print("Patient History found!")
-                        # print("Patient History:", patient_history)
                         if debug:
                             count = count + 1
                         latest_creatine_result = data[1]
@@ -196,15 +193,11 @@ def start_server(
                             latest_creatine_date,
                             patient_history,
                         )
-                        # print("D value computed: ", D, change_)
                         C1, RV1, RV1_ratio, RV2, RV2_ratio = RV_compute(
                             latest_creatine_result,
                             latest_creatine_date,
                             patient_history,
                         )
-                        # print(
-                        #     f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                        # )
                         features = [
                             patient_history[0][1],
                             label_encode(patient_history[0][2]),
@@ -233,9 +226,6 @@ def start_server(
                         RV1_ratio = 0
                         RV2 = 0
                         RV2_ratio = 0
-                        print(
-                            f"C1: {C1}, RV1: {RV1}, RV1_ratio: {RV1_ratio}, RV2_ratio: {RV2_ratio} calculated!"
-                        )
                         features = [
                             db.get_patient(mrn)[1],
                             label_encode(db.get_patient(mrn)[2]),
@@ -253,12 +243,16 @@ def start_server(
                         aki = predict_with_dt(dt_model, input)
 
                     else:
+                        # This ideally shouldn't happen -
                         count_mlp = count_mlp + 1
-                        print("No such patient in the patients table. Inserting with default values...")
+                        print(
+                            "No such patient in the patients table. Inserting with default values..."
+                        )
 
-                        # insert the patient into the DB.
+                        # insert the patient into the DB - with default values to avoid this flow the next time we get a test result for this patient
                         db.insert_patient(mrn, DEFAULT_AGE, DEFAULT_SEX)
                         print(f"Inserted new patient with MRN: {mrn}!")
+                        # Predict NO AKI for the current LIMS message.
                         aki = ["n"]
 
                     # If predicted AKI, send the Pager request
@@ -288,7 +282,7 @@ def start_server(
                     )
                     # insert the current test result into the DB
                     db.insert_test_result(mrn, data[0], data[1])
-                    
+
                     if debug:
                         latency = end_time - start_time
                         latencies.append(latency)
@@ -306,7 +300,6 @@ def start_server(
                 print("Sending ACK message...")
                 ack_message = create_acknowledgement()
                 sock.sendall(ack_message)
-                # print("Number of times the patient is not there in table", count_mlp)
                 print("-" * 80)
             else:
                 print("No valid MLLP message received.")
