@@ -28,29 +28,32 @@ spec:
     spec:
       containers:
       - name: aki-detection
-        image: imperialswemlsspring2024.azurecr.io/coursework5-peace
-        command: ["/bin/sh", "-c"]
+        image: imperialswemlsspring2024.azurecr.io/coursework6-peace
+        command: ["/app/main.py"]
         args:
-          - ./main.py
           - "--history=/hospital-history/history.csv"
         env:
+        - name: HISTORY_PATH
+          value: /hospital-history/history.csv
         - name: MLLP_ADDRESS
-          value: peace-simulator.coursework5:8440
+          value: peace-simulator.coursework6:8440
         - name: PAGER_ADDRESS
-          value: peace-simulator.coursework5:8441
+          value: peace-simulator.coursework6:8441
         - name: PYTHONUNBUFFERED
           value: "1"
         volumeMounts:
           - mountPath: "/hospital-history"
             name: hospital-history
             readOnly: true
+          - mountPath: "/state"
+            name: aki-detection-state
         resources:
           requests:
             memory: 1Gi
             cpu: 1
       initContainers:
       - name: copy-hospital-history
-        image: imperialswemlsspring2024.azurecr.io/coursework5-history
+        image: imperialswemlsspring2024.azurecr.io/coursework6-history
         volumeMounts:
           - mountPath: "/hospital-history"
             name: hospital-history

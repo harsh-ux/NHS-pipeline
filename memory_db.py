@@ -4,9 +4,10 @@ import os
 from utils import populate_test_results_table, populate_patients_table
 import threading
 
+
 class InMemoryDatabase:
     def __init__(self, history_load_path):
-        self.on_disk_db_lock = threading.Lock()
+        # self.on_disk_db_lock = threading.Lock()
         self.disk_db_being_accessed = False
         self.discharged_patient_mrns = {}
         self.connection = sqlite3.connect(":memory:")
@@ -15,7 +16,9 @@ class InMemoryDatabase:
         # make sure we always have a db file
         if not os.path.exists(ON_DISK_DB_PATH):
             # create the directories if they don't already exist
-            os.makedirs('/'.join(ON_DISK_DB_PATH.split('/')[:-1]), mode=0o700, exist_ok=True)
+            os.makedirs(
+                "/".join(ON_DISK_DB_PATH.split("/")[:-1]), mode=0o700, exist_ok=True
+            )
             # persist the database on-disk
             self.persist_db()
 
@@ -106,7 +109,7 @@ class InMemoryDatabase:
             VALUES 
                 (?, ?, ?)
         """
-         # in case the patient was discharged before
+        # in case the patient was discharged before
         if mrn in self.discharged_patient_mrns:
             self.discharged_patient_mrns[mrn] = False
         # execute the query
@@ -137,7 +140,7 @@ class InMemoryDatabase:
             VALUES 
                 (?, ?, ?)
         """
-        
+
         # execute the query
         try:
             self.connection.execute(query, (mrn, date, result))
@@ -157,6 +160,18 @@ class InMemoryDatabase:
         cursor.execute("SELECT * FROM features WHERE mrn = ?", (mrn,))
         return cursor.fetchone()
 
+    def database_loaded(self):
+        """
+        Query the patients table to check if it is currently loaded
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM test_results")
+        count = cursor.fetchone()[0]
+        if count > 0:
+            return True
+        else:
+            return False
+
     def get_patient(self, mrn):
         """
         Query the patients table for a given mrn.
@@ -166,7 +181,7 @@ class InMemoryDatabase:
         cursor = self.connection.cursor()
         cursor.execute("SELECT * FROM patients WHERE mrn = ?", (mrn,))
         return cursor.fetchone()
-    
+
     def get_test_result(self, mrn, date):
         """
         Query the test result table for a given mrn and date.
@@ -175,7 +190,9 @@ class InMemoryDatabase:
             - date {str}: The date and time of the test
         """
         cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM test_results WHERE mrn = ? AND date = ?", (mrn, date))
+        cursor.execute(
+            "SELECT * FROM test_results WHERE mrn = ? AND date = ?", (mrn, date)
+        )
         return cursor.fetchone()
 
     def get_test_results(self, mrn):
@@ -233,12 +250,12 @@ class InMemoryDatabase:
         Perform any queued operations on the on-disk database.
         """
         # delete the discharged patients
-        print('Started executing queued operations.')
+        print("Started executing queued operations.")
         for mrn in self.discharged_patient_mrns:
             if self.discharged_patient_mrns[mrn]:
                 disk_connection.execute("DELETE FROM patients WHERE mrn = ?", (mrn,))
         disk_connection.commit()
-        print('Finished commiting queued operations.')
+        print("Finished commiting queued operations.")
         self.discharged_patient_mrns.clear()
 
     def update_patient_features(self, mrn, **kwargs):
@@ -267,17 +284,18 @@ class InMemoryDatabase:
         self.connection.commit()
         with self.on_disk_db_lock:
             self.disk_db_being_accessed = True
-            print('Lock acquired in persist_db.')
+            print("Lock acquired in persist_db.")
             with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
                 self.connection.backup(disk_connection)
                 self.execute_queued_operations(disk_connection)
         self.disk_db_being_accessed = False
-        print('Lock released in persist_db.')
+        print("Lock released in persist_db.")
 
     def load_db(self, history_load_path):
         """
         Load the on-disk database into the in-memory database.
         """
+        print(f"checking for {ON_DISK_DB_PATH}...")
         # if on-disk db doesn't exist, use the csv file
         if not os.path.exists(ON_DISK_DB_PATH):
             print("Loading the history.csv file in memory.")
@@ -287,12 +305,12 @@ class InMemoryDatabase:
             # load the on-disk db into the in-memory one
             with self.on_disk_db_lock:
                 self.disk_db_being_accessed = True
-                print('Lock acquired in load_db.')
+                print("Lock acquired in load_db.")
                 with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
                     print("Loading the on-disk database in memory.")
                     disk_connection.backup(self.connection)
             self.disk_db_being_accessed = False
-            print('Lock released in load_db.')
+            print("Lock released in load_db.")
 
     def close(self):
         """
