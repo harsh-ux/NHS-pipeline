@@ -7,7 +7,7 @@ class TestInMemoryDatabase(unittest.TestCase):
         """
         Initialises the database before each test.
         """
-        self.db = InMemoryDatabase()
+        self.db = InMemoryDatabase('data/history.csv')
 
 
     def tearDown(self):
@@ -47,6 +47,16 @@ class TestInMemoryDatabase(unittest.TestCase):
         queried_record = self.db.get_patient('0012352')
         self.assertEqual(actual_record, queried_record)
 
+
+    def test_insert_and_get_for_test_result(self):
+        date = str(datetime.today())
+        actual_record = ('0012352', date, 109.43)
+        # insert
+        self.db.insert_test_result(*actual_record)
+        # get
+        queried_record = self.db.get_test_result('0012352', date)
+        self.assertEqual(actual_record, queried_record)
+
     
     def test_insert_and_get_for_test_results(self):
         actual_record = ('0012352', str(datetime.today()), 109.43)
@@ -58,14 +68,15 @@ class TestInMemoryDatabase(unittest.TestCase):
 
     
     def test_get_patient_history(self):
+        date = str(datetime.today())
         patient = ['0012352', 29, 'f']
-        test_result = ['0012352', str(datetime.today()), 109.43]
+        test_result = ['0012352', date, 109.43]
         # insert
         self.db.insert_patient(*patient)
         self.db.insert_test_result(*test_result)
         # get
         queried_record = self.db.get_patient_history(patient[0])[0]
-        self.assertEqual(tuple(patient + test_result), queried_record)
+        self.assertEqual(tuple(patient + test_result[1:]), queried_record)
 
 
     def test_discharge_patient(self):
@@ -73,7 +84,7 @@ class TestInMemoryDatabase(unittest.TestCase):
         # insert
         self.db.insert_patient(*patient)
         # discharge
-        self.db.discharge_patient(patient[0], update_disk_db=False)
+        self.db.discharge_patient(patient[0])
         # get patient
         queried_record = self.db.get_patient(patient[0])
         self.assertIsNone(queried_record)
