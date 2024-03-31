@@ -81,7 +81,7 @@ AKI_POSITIVE_RATE = Gauge("positive_AKI_rate", "Positive AKI rate")
 
 
 def start_server(
-    history_load_path, mllp_address, pager_address, pager_stack, debug=False
+    db, current_socket, mllp_host, mllp_port, pager_address, pager_stack, debug=False
 ):
     """
     Starts the TCP server to listen for incoming MLLP messages on the specified port.
@@ -90,17 +90,7 @@ def start_server(
         latencies = []  # to measure latency
         outputs = []  # to measure f3 score
         count = 0
-    mllp_host, mllp_port = strip_url(mllp_address)
 
-    # Initialise the in-memory database
-    db = InMemoryDatabase(history_load_path)  # this also loads the previous history
-
-    if db.database_loaded() == True:
-        print("Database loaded correctly")
-    else:
-        print("Database not loaded properly")
-
-    assert db != None, "In-memory Database is not initialised properly..."
     # Variables to keep track of the total sum and count of blood test values
     total_blood_sum = 0.0
     count_blood = 0
@@ -162,6 +152,7 @@ def start_server(
                         print(f"Failed to insert patient {mrn}, trying once more")
                         # and try again
                         db.insert_patient(mrn, int(data[0]), str(data[1]))
+
                 elif category == "PAS-discharge":
                     increment_patient_discharge(PATIENT_DISCHARGE_COUNTER)
                     print(f"PAS-discharge: Discharging {mrn} ...")
@@ -362,12 +353,12 @@ def main():
         type=bool,
         help="Whether to calculate F3 and Latency Score",
     )
-    parser.add_argument(
-        "--history",
-        default="data/history.csv",
-        type=str,
-        help="Where to load the history.csv file from",
-    )
+    # parser.add_argument(
+    #     "--history",
+    #     default="data/history.csv",
+    #     type=str,
+    #     help="Where to load the history.csv file from",
+    # )
     # Start the metrics server in a background thread
     metrics_thread = threading.Thread(target=start_metrics_server, args=(8000,))
     metrics_thread.daemon = True
@@ -380,6 +371,33 @@ def main():
     if os.path.exists(ON_DISK_PAGER_STACK_PATH):
         with open(ON_DISK_PAGER_STACK_PATH, "rb") as file:
             pager_stack = pickle.load(file)
+
+    mllp_host, mllp_port = strip_url(MLLP_LINK)
+
+    # Initialise the in-memory database
+    db = InMemoryDatabase(HISTORY_FILE)  # this also loads the previous history
+
+    if db.database_loaded() == True:
+        print("Database loaded correctly")
+    else:
+        print("Database not loaded properly")
+
+    assert db != None, "In-memory Database is not initialised properly..."
+    # Start the server
+    sock = connect_to_mllp(mllp_host, mllp_port)
+    increment_socket_connections(SOCKET_RECONNECTIONS_COUNTER)
+
+    # store the current socket for connection management
+    current_socket = {"sock": sock}
+
+    # register signals for graceful shutdown
+    signal.signal(
+        signal.SIGINT, define_graceful_shutdown(db, current_socket, pager_stack)
+    )
+    signal.signal(
+        signal.SIGTERM, define_graceful_shutdown(db, current_socket, pager_stack)
+    )
+
     start_server(
         HISTORY_PATH, MLLP_LINK, PAGER_LINK, pager_stack=pager_stack, debug=flags.debug
     )

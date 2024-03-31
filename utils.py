@@ -104,6 +104,7 @@ def populate_test_results_table(db, path):
         - db {InMemoryDatabase}: the database object
         - path {str}: path to the data
     """
+    print(f"Loading test results from {path}...")
     with open(path, newline="") as f:
         rows = csv.reader(f)
         for i, row in enumerate(rows):

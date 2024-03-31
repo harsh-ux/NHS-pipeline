@@ -7,7 +7,7 @@ import threading
 
 class InMemoryDatabase:
     def __init__(self, history_load_path):
-        self.on_disk_db_lock = threading.Lock()
+        # self.on_disk_db_lock = threading.Lock()
         self.disk_db_being_accessed = False
         self.discharged_patient_mrns = {}
         self.connection = sqlite3.connect(":memory:")
@@ -295,6 +295,7 @@ class InMemoryDatabase:
         """
         Load the on-disk database into the in-memory database.
         """
+        print(f"checking for {ON_DISK_DB_PATH}...")
         # if on-disk db doesn't exist, use the csv file
         if not os.path.exists(ON_DISK_DB_PATH):
             print("Loading the history.csv file in memory.")

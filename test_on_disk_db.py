@@ -4,6 +4,14 @@ memory_db = InMemoryDatabase('data/history.csv')
 
 disk_conn = sqlite3.connect('/state/database.db')
 cursor = disk_conn.cursor()
+disk_cursor = disk_conn.cursor()
+count_all_patients_query = "SELECT Count(mrn) FROM patients"
+actual_num_patients = disk_cursor.execute(count_all_patients_query).fetchone()
+print(actual_num_patients)
+
+count_all_test_results_query = "SELECT Count(mrn) FROM test_results"
+actual_num_results = disk_cursor.execute(count_all_test_results_query).fetchone()
+print(actual_num_results)
 
 patients = [['822825', 20, 'f'], ['522854', 42, 'm'], ['65289', 56, 'f']]
 
@@ -22,9 +30,6 @@ expected_tables = memory_cursor.execute(get_tables_query).fetchall()
 actual_tables = disk_cursor.execute(get_tables_query).fetchall()
 
 # test present patients
-count_all_patients_query = "SELECT Count(mrn) FROM patients"
-expected_num_patients = memory_cursor.execute(count_all_patients_query).fetchone()
-actual_num_patients = disk_cursor.execute(count_all_patients_query).fetchone()
 
 # test present test results
 count_all_test_results_query = "SELECT Count(mrn) FROM test_results"
