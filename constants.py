@@ -26,3 +26,6 @@ FEATURES_COLUMNS = [
     "change_within_48hrs",
     "D",
 ]
+
+DEFAULT_AGE = 35
+DEFAULT_SEX = "F"

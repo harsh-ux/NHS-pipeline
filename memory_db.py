@@ -282,29 +282,12 @@ class InMemoryDatabase:
         """
         # backs up and closes the connection
         self.connection.commit()
-        # with self.on_disk_db_lock:
-        self.disk_db_being_accessed = True
-        print("Lock acquired in persist_db.")
-        with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
-            self.connection.backup(disk_connection)
-            print("persist db was called successfully...")
-            disk_cursor = disk_connection.cursor()
-            memory_cursor = self.connection.cursor()
-
-            count_all_test_results_query = "SELECT Count(mrn) FROM test_results"
-            expected_num_results = memory_cursor.execute(
-                count_all_test_results_query
-            ).fetchone()
-            actual_num_results = disk_cursor.execute(
-                count_all_test_results_query
-            ).fetchone()
-
-            print("-" * 20)
-            print(expected_num_results, actual_num_results)
-            print("-" * 20)
-            memory_cursor.close()
-            disk_cursor.close()
-            self.execute_queued_operations(disk_connection)
+        with self.on_disk_db_lock:
+            self.disk_db_being_accessed = True
+            print("Lock acquired in persist_db.")
+            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                self.connection.backup(disk_connection)
+                self.execute_queued_operations(disk_connection)
         self.disk_db_being_accessed = False
         print("Lock released in persist_db.")
 
@@ -320,17 +303,12 @@ class InMemoryDatabase:
             # populate_patients_table(self, 'processed_history.csv')
         else:
             # load the on-disk db into the in-memory one
-            # with self.on_disk_db_lock:
-            self.disk_db_being_accessed = True
-            print("Lock acquired in load_db.")
-            with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
-                print("Loading the on-disk database in memory.")
-                disk_connection.backup(self.connection)
-            x = self.get_patient("706884")
-            if x:
-                print(x)
-            else:
-                print("patient 706884 not found...")
+            with self.on_disk_db_lock:
+                self.disk_db_being_accessed = True
+                print("Lock acquired in load_db.")
+                with sqlite3.connect(ON_DISK_DB_PATH) as disk_connection:
+                    print("Loading the on-disk database in memory.")
+                    disk_connection.backup(self.connection)
             self.disk_db_being_accessed = False
             print("Lock released in load_db.")
 

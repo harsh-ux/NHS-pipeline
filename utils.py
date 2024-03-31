@@ -150,9 +150,12 @@ def populate_patients_table(db, path):
 def parse_system_message(message):
     """
     Parses the HL7 message and returns components of respective message type: PAS, LIMS
+
     Args:
-        - HL7 message object
-    Returns the category of message, MRN, [AGE, SEX] if PAS category or [DATE_BLOOD_TEST, CREATININE_VALUE] if LIMS
+    - message: HL7 message object
+
+    Returns:
+    - The category of message, MRN, [AGE, SEX] if PAS category or [DATE_BLOOD_TEST, CREATININE_VALUE] if LIMS
     """
     mrn = 0
     category = ""
@@ -180,7 +183,13 @@ def parse_system_message(message):
 
 def calculate_age(date_of_birth):
     """
-    Calculate age based on the date of birth provided in the format YYYYMMDD.
+    Calculates the age of a person given their date of birth.
+
+    Args:
+    - date_of_birth (str): The person's date of birth in "YYYYMMDD" format.
+
+    Returns:
+    - int: The age of the person as an integer.
     """
     # Parse the date of birth string into a datetime object
     dob = datetime.datetime.strptime(date_of_birth, "%Y%m%d")
@@ -291,6 +300,21 @@ def label_encode(sex):
 
 
 def send_pager_request(mrn, latest_creatine_date, pager_address, pager_stack):
+    """
+    Sends pager requests for a given MRN and attempts to send additional requests from a stack until a failure occurs or all are sent.
+
+    Args:
+    - mrn (str): The mrn to send.
+    - latest_creatine_date (str): The latest date of creatine measurement associated with the MRN.
+    - pager_address (str): The pager service address
+    - pager_stack (list of tuples): A stack (list) of MRNs and their associated creatine dates to send.
+
+    Returns:
+    - pager_stack (list of tuples): Updated pager stack with any requests that failed to send.
+
+    Note:
+    - This function uses an exponential backoff strategy for retries upon failed requests.
+    """
     print("Sending a page for mrn:", mrn)
     # Define the URL for the pager request.
     pager_host, pager_port = strip_url(pager_address)
@@ -303,7 +327,7 @@ def send_pager_request(mrn, latest_creatine_date, pager_address, pager_stack):
         # Convert the MRN to a string and encode it to bytes, as the body of the POST request.
         data = str(mrn) + "," + str(latest_creatine_date)
         data = data.encode("utf-8")
-        retry_delay = 1  # 1 second retry delay
+        retry_delay = 0.4  # 0.4 second retry delay so we meet latency
         retries = 0
         max_retries = 3
         is_success = False
@@ -382,6 +406,7 @@ def strip_url(url):
     host = parts[0].strip()
 
     # Check if the port is specified
+    port = None
     if ":" in host:
         host, port = host.split(":")
         port = int(port)
@@ -389,6 +414,18 @@ def strip_url(url):
 
 
 def define_graceful_shutdown(db, current_socket, pager_stack):
+    """
+    Returns a function to gracefully shutdown the application. It is a wrapper as the signal library expects only signum and frame as the arguemnts and this way we can persisting the database, close the socket, and save the pager stack.
+
+    Args:
+    - db: Database object with `persist_db` and `close` methods.
+    - current_socket: Dictionary containing the socket object under "sock" key.
+    - pager_stack: Data structure to be saved on disk.
+
+    Returns:
+    - A signal handler function for graceful shutdown.
+    """
+
     def graceful_shutdown(signum, frame):
         print("Graceful shutdown procedure started.")
         db.persist_db()
@@ -404,6 +441,18 @@ def define_graceful_shutdown(db, current_socket, pager_stack):
 
 
 def exponential_backoff_retry(func):
+    """
+    Wraps a function to automatically retry with exponential backoff upon failure.
+
+    This decorator tries to execute the wrapped function, retrying with an increasing delay if it fails. The delay doubles with each attempt, starting from 1 second, up to a maximum of 10 minutes between retries.
+
+    Args:
+    - func: The function to be wrapped and retried.
+
+    Returns:
+    - The wrapper function that handles the retries.
+    """
+
     def wrapper(*args, **kwargs):
         base_delay = 1  # in seconds
         attempt = 0
@@ -427,6 +476,21 @@ def exponential_backoff_retry(func):
 
 @exponential_backoff_retry
 def connect_to_mllp(host, port):
+    """
+    Attempts to connect to an MLLP server at the given host and port, retrying with
+    exponential backoff on failure.
+
+    Args:
+    - host: The hostname of the MLLP server.
+    - port: The port number of the MLLP server.
+
+    Returns:
+    - A socket object connected to the MLLP server.
+
+    Raises:
+    - Socket exceptions may be raised and caught by the decorator for retry. The function
+      itself will not explicitly handle these exceptions, leaving that to the retry logic.
+    """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((host, int(port)))
     print(f"Connected to MLLP on {host}:{port}")
@@ -434,6 +498,15 @@ def connect_to_mllp(host, port):
 
 
 def read_from_mllp(sock):
+    """
+    This function continuously reads from the socket in chunks of 1024 bytes until the MLLP end-of-block marker is found in the buffer. If the connection is reset during reading, it attempts to gracefully handle the error by closing the socket and indicating a need for reconnection.
+
+    Args:
+    - sock: The socket object representing the MLLP connection.
+
+    Returns:
+    - A tuple containing the buffer read from the connection and a boolean flag. The flag is True if the connection was reset and needs reconnection, False otherwise. If an error occurs, returns None for the buffer and the appropriate flag.
+    """
     try:
         buffer = b""
         while MLLP_END_OF_BLOCK not in buffer:
