@@ -3,7 +3,6 @@
 import signal
 import pickle
 import argparse
-import threading
 from joblib import load
 from utils import (
     process_mllp_message,
@@ -232,7 +231,6 @@ def start_server(
                         input = pd.DataFrame([features], columns=FEATURES_COLUMNS)
                         print("Calling DT!")
                         aki = predict_with_dt(dt_model, input)
-
                     else:
                         # This ideally shouldn't happen -
                         count_mlp = count_mlp + 1
